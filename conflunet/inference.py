@@ -22,8 +22,8 @@ parser.add_argument('--path_pred', type=str, required=True,
 parser.add_argument('--path_model', type=str, default='',
                     help='Specify the path to the trained model')
 # data
-parser.add_argument('--path_data', type=str, required=True, default='~/data/bxl',
-                    help='Specify the path to the data directory where img/ labels/ (and bm/) directories can be found')
+parser.add_argument('--path_data', type=str, required=True, default='~/data/cusl_wml',
+                    help='Specify the path to the data directory where train/ test/ and val/ directories can be found')
 parser.add_argument('--test', action="store_true", default=False,
                     help="whether to use the test set or not. (default to validation set)")
 parser.add_argument('--sequences', type=str, nargs='+', required=True,
