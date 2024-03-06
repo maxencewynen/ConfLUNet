@@ -159,11 +159,6 @@ def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = []
     Returns:
         float: Panoptic Quality (PQ) metric.
     """
-    assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
-    assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
-        "All instances in matched_pairs should be in pred and ref."
-    assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
-    assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
     # assert (pred and ref) or (len(matched_pairs)>0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0)
 
     if len(matched_pairs) > 0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0:
@@ -172,6 +167,11 @@ def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = []
         fn = len(unmatched_ref)
     else:
         matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)
+        assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+        assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
+            "All instances in matched_pairs should be in pred and ref."
+        assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
+        assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
         tp = len(matched_pairs)
         fp = len(unmatched_pred)
         fn = len(unmatched_ref)
@@ -206,20 +206,18 @@ def f_beta_score(pred: np.ndarray = None, ref: np.ndarray = None, beta: float = 
     Returns:
         float: F-beta score.
     """
-    assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
-    assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
-        "All instances in matched_pairs should be in pred and ref."
-    assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
-    assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
     # assert (pred is not None and ref is not None) or \
     #     (len(matched_pairs)>0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0)
-
+    breakpoint()
     if len(matched_pairs) > 0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0:
         tp = len(matched_pairs)
         fp = len(unmatched_pred)
         fn = len(unmatched_ref)
     else:
+        assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
         matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)
+        assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
+        assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
         tp = len(matched_pairs)
         fp = len(unmatched_pred)
         fn = len(unmatched_ref)
@@ -244,10 +242,6 @@ def ltpr(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = 
     Returns:
         float: Lesion True Positive Rate (LTPR).
     """
-    assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
-    assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
-        "All instances in matched_pairs should be in pred and ref."
-    assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
     # assert (pred is not None and ref is not None) or \
     #     (len(matched_pairs)>0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0)
 
@@ -256,6 +250,10 @@ def ltpr(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = 
         fn = len(unmatched_ref)
     else:
         matched_pairs, _, unmatched_ref = match_instances(pred, ref)
+        assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+        assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
+            "All instances in matched_pairs should be in pred and ref."
+        assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
         tp = len(matched_pairs)
         fn = len(unmatched_ref)
     return tp / (tp + fn + 1e-6)
@@ -273,10 +271,6 @@ def ppv(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = N
     Returns:
         float: Positive Predictive Value (PPV).
     """
-    assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
-    assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
-        "All instances in matched_pairs should be in pred and ref."
-    assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
     # assert (pred is not None and ref is not None) or \
     #     (len(matched_pairs)>0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0)
 
@@ -285,6 +279,10 @@ def ppv(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = N
         fp = len(unmatched_pred)
     else:
         matched_pairs, unmatched_pred, _ = match_instances(pred, ref)
+        assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+        assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
+            "All instances in matched_pairs should be in pred and ref."
+        assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
         tp = len(matched_pairs)
         fp = len(unmatched_pred)
     return tp / (tp + fp + 1e-6)
@@ -463,11 +461,13 @@ def compute_metrics(args):
     ref_dir = os.path.join(args.ref_path, dd, "labels")
 
     for ref_file in sorted(os.listdir(ref_dir)):
+        if "sub-029" in ref_file: continue
         if ref_file.endswith("mask-instances.nii.gz"):
             print(ref_file)
             subj_id = ref_file.split("_ses")[0].split("sub-")[-1]  # Extracting subject ID
             pred_file = "sub-" + subj_id + "_ses-01_pred_instances.nii.gz"
             pred_file_path = os.path.join(args.pred_path, pred_file)
+            breakpoint()
 
             if not os.path.exists(pred_file_path):
                 pred_file_path = pred_file_path.replace('pred_instances', 'pred-instances')
