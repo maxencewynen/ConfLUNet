@@ -145,36 +145,33 @@ def match_instances(pred: np.ndarray, ref: np.ndarray, threshold: float = 0.1):
     return matched_pairs, unmatched_pred, unmatched_ref
 
 
-def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = [], unmatched_pred: list = [],
-                     unmatched_ref: list = []):
+def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = None, unmatched_pred: list = None,
+                     unmatched_ref: list = None):
     """
     Compute the Panoptic Quality (PQ) metric to compare predicted and reference instance segmentation.
     Args:
         pred: numpy.ndarray, instance segmentation mask of predicted instances. Shape [H, W, D].
         ref: numpy.ndarray, instance segmentation mask of ground truth instances. Shape [H, W, D].
         matched_pairs: list of tuples (pred_id, ref_id) indicating matched instance pairs.
-                        Defaults to an empty list.
-        unmatched_pred: list of unmatched predicted instance ids. Defaults to an empty list.
-        unmatched_ref: list of unmatched ground truth instance ids. Defaults to an empty list.
+                        If None, computes it. Defaults to None.
+        unmatched_pred: list of unmatched predicted instance ids. If None, computes it. Defaults to None.
+        unmatched_ref: list of unmatched ground truth instance ids. If None, computes it. Defaults to None.
     Returns:
         float: Panoptic Quality (PQ) metric.
     """
     assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+
+    if matched_pairs is None or unmatched_pred is None or unmatched_ref is None:
+        matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)
+
     assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
         "All instances in matched_pairs should be in pred and ref."
     assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
     assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
-    # assert (pred and ref) or (len(matched_pairs)>0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0)
 
-    if len(matched_pairs) > 0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0:
-        tp = len(matched_pairs)
-        fp = len(unmatched_pred)
-        fn = len(unmatched_ref)
-    else:
-        matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)
-        tp = len(matched_pairs)
-        fp = len(unmatched_pred)
-        fn = len(unmatched_ref)
+    tp = len(matched_pairs)
+    fp = len(unmatched_pred)
+    fn = len(unmatched_ref)
 
     sq_sum = 0
     for pair in matched_pairs:
@@ -191,8 +188,7 @@ def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = []
 
 
 def f_beta_score(pred: np.ndarray = None, ref: np.ndarray = None, beta: float = 1,
-                 matched_pairs: list = [], unmatched_pred: list = [],
-                 unmatched_ref: list = []):
+                 matched_pairs: list = None, unmatched_pred: list = None, unmatched_ref: list = None):
     """
     Compute the F-beta score, a weighted harmonic mean of precision and recall.
     Args:
@@ -200,29 +196,24 @@ def f_beta_score(pred: np.ndarray = None, ref: np.ndarray = None, beta: float = 
         ref: numpy.ndarray, instance segmentation mask of ground truth instances. Shape [H, W, D]. Defaults to None.
         beta: float, weighting factor for precision in harmonic mean. Defaults to 1.
         matched_pairs: list of tuples (pred_id, ref_id) indicating matched instance pairs.
-                        Defaults to an empty list.
-        unmatched_pred: list of unmatched predicted instance ids. Defaults to an empty list.
-        unmatched_ref: list of unmatched ground truth instance ids. Defaults to an empty list.
+                        If None, computes it. Defaults to None.
+        unmatched_pred: list of unmatched predicted instance ids. If None, computes it. Defaults to None.
+        unmatched_ref: list of unmatched ground truth instance ids. If None, computes it. Defaults to None.
     Returns:
         float: F-beta score.
     """
-    assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+    if matched_pairs is None or unmatched_pred is None or unmatched_ref is None:
+        assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+        matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)
+
     assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
         "All instances in matched_pairs should be in pred and ref."
     assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
     assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
-    # assert (pred is not None and ref is not None) or \
-    #     (len(matched_pairs)>0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0)
 
-    if len(matched_pairs) > 0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0:
-        tp = len(matched_pairs)
-        fp = len(unmatched_pred)
-        fn = len(unmatched_ref)
-    else:
-        matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)
-        tp = len(matched_pairs)
-        fp = len(unmatched_pred)
-        fn = len(unmatched_ref)
+    tp = len(matched_pairs)
+    fp = len(unmatched_pred)
+    fn = len(unmatched_ref)
 
     precision = tp / (tp + fp + 1e-6)
     recall = tp / (tp + fn + 1e-6)
@@ -244,25 +235,20 @@ def ltpr(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = 
     Returns:
         float: Lesion True Positive Rate (LTPR).
     """
-    assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+    if matched_pairs is None or unmatched_ref is None:
+        assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+        matched_pairs, _, unmatched_ref = match_instances(pred, ref)
+
     assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
         "All instances in matched_pairs should be in pred and ref."
     assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
-    # assert (pred is not None and ref is not None) or \
-    #     (len(matched_pairs)>0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0)
 
-    if matched_pairs is not None and unmatched_ref is not None:
-        tp = len(matched_pairs)
-        fn = len(unmatched_ref)
-    else:
-        matched_pairs, _, unmatched_ref = match_instances(pred, ref)
-        tp = len(matched_pairs)
-        fn = len(unmatched_ref)
+    tp = len(matched_pairs)
+    fn = len(unmatched_ref)
     return tp / (tp + fn + 1e-6)
 
 
-def ppv(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = None,
-        unmatched_pred: list = None):
+def ppv(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = None, unmatched_pred: list = None):
     """
     Compute the Positive Predictive Value (PPV), also known as precision but for object-wise metrics.
     Args:
@@ -273,20 +259,16 @@ def ppv(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = N
     Returns:
         float: Positive Predictive Value (PPV).
     """
-    assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+    if matched_pairs is None and unmatched_pred is None:
+        assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+        matched_pairs, unmatched_pred, _ = match_instances(pred, ref)
+
     assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
         "All instances in matched_pairs should be in pred and ref."
     assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
-    # assert (pred is not None and ref is not None) or \
-    #     (len(matched_pairs)>0 and len(unmatched_pred) > 0 and len(unmatched_ref) > 0)
 
-    if matched_pairs is not None and unmatched_pred is not None:
-        tp = len(matched_pairs)
-        fp = len(unmatched_pred)
-    else:
-        matched_pairs, unmatched_pred, _ = match_instances(pred, ref)
-        tp = len(matched_pairs)
-        fp = len(unmatched_pred)
+    tp = len(matched_pairs)
+    fp = len(unmatched_pred)
     return tp / (tp + fp + 1e-6)
 
 
