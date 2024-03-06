@@ -164,10 +164,14 @@ def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = No
     if matched_pairs is None or unmatched_pred is None or unmatched_ref is None:
         matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)
 
-    assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
-        "All instances in matched_pairs should be in pred and ref."
-    assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
-    assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
+    if pred is not None and ref is not None:
+        unique_preds = np.unique(pred)
+        unique_refs = np.unique(ref)
+        for pred_id, ref_id in matched_pairs:
+            assert pred_id in unique_preds, f"ID {pred_id} is not in prediction matrix"
+            assert ref_id in unique_refs, f"ID {ref_id} is not in reference matrix"
+        assert all([x in unique_preds for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
+        assert all([x in unique_refs for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
 
     tp = len(matched_pairs)
     fp = len(unmatched_pred)
@@ -205,11 +209,15 @@ def f_beta_score(pred: np.ndarray = None, ref: np.ndarray = None, beta: float = 
     if matched_pairs is None or unmatched_pred is None or unmatched_ref is None:
         assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
         matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)
-
-    assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
-        "All instances in matched_pairs should be in pred and ref."
-    assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
-    assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
+    
+    if pred is not None and ref is not None:
+        unique_preds = np.unique(pred)
+        unique_refs = np.unique(ref)
+        for pred_id, ref_id in matched_pairs:
+            assert pred_id in unique_preds, f"ID {pred_id} is not in prediction matrix"
+            assert ref_id in unique_refs, f"ID {ref_id} is not in reference matrix"
+        assert all([x in unique_preds for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
+        assert all([x in unique_refs for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
 
     tp = len(matched_pairs)
     fp = len(unmatched_pred)
@@ -239,9 +247,13 @@ def ltpr(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = 
         assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
         matched_pairs, _, unmatched_ref = match_instances(pred, ref)
 
-    assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
-        "All instances in matched_pairs should be in pred and ref."
-    assert all([x in np.unique(ref) for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
+    if pred is not None and ref is not None:
+        unique_preds = np.unique(pred)
+        unique_refs = np.unique(ref)
+        for pred_id, ref_id in matched_pairs:
+            assert pred_id in unique_preds, f"ID {pred_id} is not in prediction matrix"
+            assert ref_id in unique_refs, f"ID {ref_id} is not in reference matrix"
+        assert all([x in unique_refs for x in unmatched_ref]), "All instances in unmatched_ref should be in ref."
 
     tp = len(matched_pairs)
     fn = len(unmatched_ref)
@@ -263,9 +275,13 @@ def ppv(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = N
         assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
         matched_pairs, unmatched_pred, _ = match_instances(pred, ref)
 
-    assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
-        "All instances in matched_pairs should be in pred and ref."
-    assert all([x in np.unique(pred) for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
+    if pred is not None and ref is not None:
+        unique_preds = np.unique(pred)
+        unique_refs = np.unique(ref)
+        for pred_id, ref_id in matched_pairs:
+            assert pred_id in unique_preds, f"ID {pred_id} is not in prediction matrix"
+            assert ref_id in unique_refs, f"ID {ref_id} is not in reference matrix"
+        assert all([x in unique_preds for x in unmatched_pred]), "All instances in unmatched_pred should be in pred."
 
     tp = len(matched_pairs)
     fp = len(unmatched_pred)
