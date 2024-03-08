@@ -205,9 +205,9 @@ def find_instance_center(ctr_hmp: torch.Tensor, threshold: float = 0.1, nms_kern
         return torch.nonzero(ctr_hmp >= top_k_scores[-1]).short()
 
 
-def find_instance_centers_dworkin(probability_map: np.ndarray, semantic_mask: np.ndarray, device: str = 'cpu') -> torch.Tensor:
+def find_instance_centers_acls(probability_map: np.ndarray, semantic_mask: np.ndarray, device: str = 'cpu') -> torch.Tensor:
     """
-    Computes the lesion centers using dworkin's method
+    Computes the lesion centers using acls's method
     Arguments:
         probability_map: A numpy.ndarray or a torch.Tensor of shape [W, H, D] of raw probability map output
         semantic_mask: A numpy.ndarray or a torch.Tensor of shape [W, H, D] of raw semantic mask output
@@ -361,7 +361,7 @@ def refine_instance_segmentation(instance_mask: np.ndarray, l_min: int = 14) -> 
         instance_mask: np.ndarray of dimension (H,W,D), array of instance ids
         l_min: minimum lesion size
     """
-    iids = np.unique(instance_mask)[1:]
+    iids = np.unique(instance_mask[instance_mask != 0])
     max_instance_id = np.max(instance_mask)
     # for every instance id
     for iid in iids:
@@ -445,7 +445,7 @@ def postprocess(semantic_mask: np.ndarray,
     semantic_mask = remove_small_lesions_from_binary_segmentation(semantic_mask, voxel_size=voxel_size, l_min=l_min)
 
     if probability_map is not None:
-        instance_centers = find_instance_centers_dworkin(probability_map, semantic_mask, device=offsets.device)
+        instance_centers = find_instance_centers_acls(probability_map, semantic_mask, device=offsets.device)
     else:
         instance_centers = find_instance_center(heatmap, threshold=heatmap_threshold)
 
@@ -474,7 +474,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Get all command line arguments.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--pred_path', help="Path to the predictions")
-    parser.add_argument('--dworkin', help="Use dworkin to find instance centers", action="store_true", default=False)
+    parser.add_argument('--acls', help="Use acls to find instance centers", action="store_true", default=False)
     parser.add_argument('--minimum_lesion_size', help="Minimum lesion size", type=int, default=14)
     parser.add_argument('--heatmap_threshold',
                         help="Probability threshold for a voxel to be considered as a center in the heatmap",
@@ -499,8 +499,8 @@ if __name__ == "__main__":
         metrics_dict["DSC"] = []
         metrics_dict["PQ"] = []
         metrics_dict["Fbeta"] = []
-        metrics_dict["LTPR"] = []
-        metrics_dict["PPV"] = []
+        metrics_dict["recall"] = []
+        metrics_dict["precision"] = []
         metrics_dict["Dice_Per_TP"] = []
         metrics_dict["Pred_Lesion_Count"] = []
         metrics_dict["Ref_Lesion_Count"] = []
@@ -531,9 +531,9 @@ if __name__ == "__main__":
             offsets = np.transpose(offsets, (3, 0, 1, 2))
         offsets = torch.from_numpy(offsets).unsqueeze(0).to(device)
 
-        probability_map = nib.load(file.replace('seg-binary', 'pred_prob')).get_fdata() if args.dworkin else None
+        probability_map = nib.load(file.replace('seg-binary', 'pred_prob')).get_fdata() if args.acls else None
         heatmap = torch.from_numpy(nib.load(file.replace('seg-binary', 'pred-heatmap')).get_fdata()).unsqueeze(
-            0).unsqueeze(0).to(device) if not args.dworkin else None
+            0).unsqueeze(0).to(device) if not args.acls else None
 
         ret = postprocess(binary_seg, heatmap, offsets, compute_voting=args.compute_voting,
                           heatmap_threshold=args.heatmap_threshold,
@@ -597,11 +597,11 @@ if __name__ == "__main__":
                                  unmatched_ref=unmatched_ref)
         metrics_dict["Fbeta"].append(fbeta_val)
 
-        ltpr_val = ltpr(matched_pairs=matched_pairs, unmatched_ref=unmatched_ref)
-        metrics_dict["LTPR"].append(ltpr_val)
+        recall_val = recall(matched_pairs=matched_pairs, unmatched_ref=unmatched_ref)
+        metrics_dict["recall"].append(recall_val)
 
-        ppv_val = ppv(matched_pairs=matched_pairs, unmatched_pred=unmatched_pred)
-        metrics_dict["PPV"].append(ppv_val)
+        precision_val = precision(matched_pairs=matched_pairs, unmatched_pred=unmatched_pred)
+        metrics_dict["precision"].append(precision_val)
         dice_scores = dice_per_tp(pred_img, ref_img, matched_pairs)
         # Assuming you want the average Dice score per subject
         avg_dice = sum(dice_scores) / len(dice_scores) if dice_scores else 0
@@ -627,7 +627,7 @@ if __name__ == "__main__":
         if clm == 0:
             metrics_dict["CLR"].append(np.nan)
         else:
-            clr = ltpr(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
+            clr = recall(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
             metrics_dict["CLR"].append(clr)
 
         if clm == 0:

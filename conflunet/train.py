@@ -366,13 +366,13 @@ def main(args):
                 metric_values_nDSC.append(metric_nDSC)
                 metric_values_DSC.append(metric_DSC)
 
-                metric_PQ, metric_F1, metric_ltpr, metric_ppv, metric_dic, metric_dice_per_tp, metric_mMV = 0, 0, 0, 0, 0, 0, 0
+                metric_PQ, metric_F1, metric_recall, metric_precision, metric_dic, metric_dice_per_tp, metric_mMV = 0, 0, 0, 0, 0, 0, 0
 
                 if metric_DSC > 0.6:
                     pqs = []
                     fbetas = []
-                    ltprs = []
-                    ppvs = []
+                    recalls = []
+                    precisions = []
                     dics = []
                     dice_scores_per_tp = []
                     max_votes = []
@@ -419,16 +419,16 @@ def main(args):
 
                         fbeta_val = f_beta_score(matched_pairs=matched_pairs, unmatched_pred=unmatched_pred,
                                                  unmatched_ref=unmatched_ref)
-                        ltpr_val = ltpr(matched_pairs=matched_pairs, unmatched_ref=unmatched_ref)
-                        ppv_val = ppv(matched_pairs=matched_pairs, unmatched_pred=unmatched_pred)
+                        recall_val = recall(matched_pairs=matched_pairs, unmatched_ref=unmatched_ref)
+                        precision_val = precision(matched_pairs=matched_pairs, unmatched_pred=unmatched_pred)
                         dice_scores = dice_per_tp(inst_pred, val_instances.squeeze().cpu().numpy(), matched_pairs)
                         avg_dice_scores = sum(dice_scores) / len(dice_scores) if dice_scores else 0
                         dic = DiC(inst_pred, val_instances.squeeze().cpu().numpy())
 
                         pqs += [pq_val]
                         fbetas += [fbeta_val]
-                        ltprs += [ltpr_val]
-                        ppvs += [ppv_val]
+                        recalls += [recall_val]
+                        precisions += [precision_val]
                         dics += [dic]
                         max_votes += [votes.max()]
                         if avg_dice_scores > 0:
@@ -437,7 +437,7 @@ def main(args):
                     metric_PQ = np.mean(pqs)
                     metric_F1 = np.mean(fbetas)
                     metric_ltpr = np.mean(ltprs)
-                    metric_ppv = np.mean(ppvs)
+                    metric_precision = np.mean(precisions)
                     metric_dic = np.mean(dics)
                     metric_dice_per_tp = np.mean(dice_scores_per_tp)
                     metric_mMV = np.mean(max_votes)
@@ -445,7 +445,7 @@ def main(args):
                     wandb.log({'Instance Segmentation Metrics/PQ (val)': metric_PQ,
                                'Instance Segmentation Metrics/F1 (val)': metric_F1,
                                'Instance Segmentation Metrics/LTPR (val)': metric_ltpr,
-                               'Instance Segmentation Metrics/PPV (val)': metric_ppv,
+                               'Instance Segmentation Metrics/precision (val)': metric_precision,
                                'Instance Segmentation Metrics/DIC (val)': metric_dic,
                                'Instance Segmentation Metrics/Dice per TP (val)': metric_dice_per_tp,
                                'Offsets Metrics/Mean max vote (val)': metric_mMV

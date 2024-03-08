@@ -237,7 +237,7 @@ def make_offset_matrices(data, sigma=2, voxel_size=(1, 1, 1), remove_small_lesio
                                          indexing='ij')
 
     # Get all unique lesion IDs (excluding zero which is typically background)
-    lesion_ids = np.unique(data)[1:]
+    lesion_ids = np.unique(data[data!=0])
 
     # For each lesion id
     for lesion_id in lesion_ids:

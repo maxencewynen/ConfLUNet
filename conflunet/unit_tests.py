@@ -629,48 +629,48 @@ class TestFindInstanceCenter(unittest.TestCase):
         self.assertTrue(centers.size(0) == 3) # make sure only three centers are returned
 
 
-class TestFindInstanceCentersDworkin(unittest.TestCase):
+class TestFindInstanceCentersacls(unittest.TestCase):
 
     def test_numpy_input(self):
         """Test if the function accepts numpy arrays as input."""
         probability_map = np.random.rand(10, 10, 10)
         semantic_mask = np.random.randint(0, 2, size=(10, 10, 10))
-        centers = find_instance_centers_dworkin(probability_map, semantic_mask)
+        centers = find_instance_centers_acls(probability_map, semantic_mask)
         self.assertIsInstance(centers, torch.Tensor)
 
     def test_probability_mask_torch_tensor_input(self):
         """Test if the function accepts PyTorch tensors as input."""
         probability_map = torch.rand(10, 10, 10)
         semantic_mask = torch.randint(0, 2, size=(10, 10, 10))
-        centers = find_instance_centers_dworkin(probability_map, semantic_mask)
+        centers = find_instance_centers_acls(probability_map, semantic_mask)
         self.assertIsInstance(centers, torch.Tensor)
 
     def test_probability_mask_numpy_array_input(self):
         """Test if the function accepts PyTorch tensors as input."""
         probability_map = torch.rand(10, 10, 10)
         semantic_mask = np.random.randint(0, 2, size=(10, 10, 10))
-        centers = find_instance_centers_dworkin(probability_map, semantic_mask)
+        centers = find_instance_centers_acls(probability_map, semantic_mask)
         self.assertIsInstance(centers, torch.Tensor)
 
     def test_semantic_mask_type_numpy_array(self):
         """Test if the function accepts PyTorch tensors as input."""
         probability_map = torch.rand(10, 10, 10)
         semantic_mask = np.random.randint(0, 2, size=(10, 10, 10))
-        centers = find_instance_centers_dworkin(probability_map, semantic_mask)
+        centers = find_instance_centers_acls(probability_map, semantic_mask)
         self.assertIsInstance(centers, torch.Tensor)
 
     def test_semantic_mask_type_torch_tensor(self):
         """Test if the function accepts PyTorch tensors as input."""
         probability_map = torch.rand(10, 10, 10)
         semantic_mask = np.random.randint(0, 2, size=(10, 10, 10))
-        centers = find_instance_centers_dworkin(probability_map, semantic_mask)
+        centers = find_instance_centers_acls(probability_map, semantic_mask)
         self.assertIsInstance(centers, torch.Tensor)
 
     def test_output_shape(self):
         """Test if the output shape is as expected."""
         probability_map = np.random.rand(10, 10, 10)
         semantic_mask = np.random.randint(0, 2, size=(10, 10, 10))
-        centers = find_instance_centers_dworkin(probability_map, semantic_mask)
+        centers = find_instance_centers_acls(probability_map, semantic_mask)
         self.assertEqual(len(centers.size()), 2)
         self.assertEqual(centers.size(1), 3)
 
@@ -681,7 +681,7 @@ class TestFindInstanceCentersDworkin(unittest.TestCase):
         probability_map[5, 5, 5] = 1
         probability_map[7, 7, 7] = 1
         semantic_mask = np.ones((10, 10, 10))
-        centers = find_instance_centers_dworkin(probability_map, semantic_mask)
+        centers = find_instance_centers_acls(probability_map, semantic_mask)
         self.assertEqual([[3,3,3], [5,5,5], [7,7,7]], sorted(centers.tolist(), key=lambda x: x[0]))
 
     def test_medium_case(self):
@@ -692,15 +692,15 @@ class TestFindInstanceCentersDworkin(unittest.TestCase):
         probability_map[5, 5, 6] = 0.99
         probability_map[7, 7, 7] = 1
         semantic_mask = np.ones((10, 10, 10))
-        centers = find_instance_centers_dworkin(probability_map, semantic_mask)
+        centers = find_instance_centers_acls(probability_map, semantic_mask)
         self.assertEqual([[5,5,5], [7,7,7]], sorted(centers.tolist(), key=lambda x: x[0]))
 
     def test_device_assignment_cpu(self):
         """Test if the function assigns output to cpu when asked."""
         probability_map = np.random.rand(10, 10, 10)
         semantic_mask = np.random.randint(0, 2, size=(10, 10, 10))
-        centers_cpu = find_instance_centers_dworkin(probability_map, semantic_mask, device='cpu')
-        # centers_gpu = find_instance_centers_dworkin(probability_map, semantic_mask, device='cuda')
+        centers_cpu = find_instance_centers_acls(probability_map, semantic_mask, device='cpu')
+        # centers_gpu = find_instance_centers_acls(probability_map, semantic_mask, device='cuda')
         self.assertEqual(centers_cpu.device, torch.device('cpu'))
         # self.assertEqual(centers_gpu.device, torch.device('cuda'))
 
@@ -708,38 +708,38 @@ class TestFindInstanceCentersDworkin(unittest.TestCase):
         """Test if the function assigns output to gpu when asked."""
         probability_map = np.random.rand(10, 10, 10)
         semantic_mask = np.random.randint(0, 2, size=(10, 10, 10))
-        centers_gpu = find_instance_centers_dworkin(probability_map, semantic_mask, device='cuda:0')
+        centers_gpu = find_instance_centers_acls(probability_map, semantic_mask, device='cuda:0')
         self.assertEqual(centers_gpu.device, torch.device('cuda:0'))
 
     def test_invalid_probability_map_type(self):
         """Test if the function raises an error for invalid probability_map type."""
         with self.assertRaises(AssertionError):
-            find_instance_centers_dworkin(torch.rand(10, 10, 10).tolist(), np.random.randint(0, 2, size=(10, 10, 10)))
+            find_instance_centers_acls(torch.rand(10, 10, 10).tolist(), np.random.randint(0, 2, size=(10, 10, 10)))
 
     def test_invalid_semantic_map_map_type(self):
         """Test if the function raises an error for invalid semantic_map type."""
         with self.assertRaises(AssertionError):
-            find_instance_centers_dworkin(torch.rand(10, 10, 10), np.random.randint(0, 2, size=(10, 10, 10)).tolist())
+            find_instance_centers_acls(torch.rand(10, 10, 10), np.random.randint(0, 2, size=(10, 10, 10)).tolist())
 
     def test_mismatching_input_dimensions_1(self):
         """Test if the function raises an error for mismatching input dimensions."""
         with self.assertRaises(AssertionError):
-            find_instance_centers_dworkin(np.random.rand(10, 10), np.random.randint(0, 2, size=(10, 10, 10)))
+            find_instance_centers_acls(np.random.rand(10, 10), np.random.randint(0, 2, size=(10, 10, 10)))
 
     def test_mismatching_input_dimensions_2(self):
         """Test if the function raises an error for mismatching input dimensions."""
         with self.assertRaises(AssertionError):
-            find_instance_centers_dworkin(np.random.rand(10, 10, 10), np.random.randint(0, 2, size=(10, 10)))
+            find_instance_centers_acls(np.random.rand(10, 10, 10), np.random.randint(0, 2, size=(10, 10)))
 
     def test_mismatching_input_shapes_1(self):
         """Test if the function raises an error for mismatching input shapes."""
         with self.assertRaises(AssertionError):
-            find_instance_centers_dworkin(np.random.rand(10, 10, 11), np.random.randint(0, 2, size=(10, 10, 10)))
+            find_instance_centers_acls(np.random.rand(10, 10, 11), np.random.randint(0, 2, size=(10, 10, 10)))
 
     def test_mismatching_input_shapes_2(self):
         """Test if the function raises an error for mismatching input shapes."""
         with self.assertRaises(AssertionError):
-            find_instance_centers_dworkin(np.random.rand(10, 10, 10), np.random.randint(0, 2, size=(10, 10, 11)))
+            find_instance_centers_acls(np.random.rand(10, 10, 10), np.random.randint(0, 2, size=(10, 10, 11)))
 
 
 class TestGroupPixels(unittest.TestCase):

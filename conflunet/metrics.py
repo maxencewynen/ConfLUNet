@@ -231,17 +231,17 @@ def f_beta_score(pred: np.ndarray = None, ref: np.ndarray = None, beta: float = 
     return f_score
 
 
-def ltpr(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = None,
+def recall(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = None,
          unmatched_ref: list = None):
     """
-    Compute the Lesion True Positive Rate (LTPr), also known as recall but for object-wise metrics.
+    Compute the Lesion True Positive Rate (recall), also known as recall but for object-wise metrics.
     Args:
         pred: numpy.ndarray, instance segmentation mask of predicted instances. Shape [H, W, D]. Defaults to None.
         ref: numpy.ndarray, instance segmentation mask of ground truth instances. Shape [H, W, D]. Defaults to None.
         matched_pairs: list of tuples (pred_id, ref_id) indicating matched instance pairs. Defaults to None.
         unmatched_ref: list of unmatched ground truth instance ids. Defaults to None.
     Returns:
-        float: Lesion True Positive Rate (LTPR).
+        float: Lesion True Positive Rate (recall).
     """
     if matched_pairs is None or unmatched_ref is None:
         assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
@@ -260,16 +260,16 @@ def ltpr(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = 
     return tp / (tp + fn + 1e-6)
 
 
-def ppv(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = None, unmatched_pred: list = None):
+def precision(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list = None, unmatched_pred: list = None):
     """
-    Compute the Positive Predictive Value (PPV), also known as precision but for object-wise metrics.
+    Compute the Positive Predictive Value (precision), also known as precision but for object-wise metrics.
     Args:
         pred: numpy.ndarray, instance segmentation mask of predicted instances. Shape [H, W, D]. Defaults to None.
         ref: numpy.ndarray, instance segmentation mask of ground truth instances. Shape [H, W, D]. Defaults to None.
         matched_pairs: list of tuples (pred_id, ref_id) indicating matched instance pairs. Defaults to None.
         unmatched_pred: list of unmatched predicted instance ids. Defaults to None.
     Returns:
-        float: Positive Predictive Value (PPV).
+        float: Positive Predictive Value (precision).
     """
     if matched_pairs is None and unmatched_pred is None:
         assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
@@ -363,14 +363,14 @@ def find_confluent_lesions(instance_segmentation: np.ndarray) -> list:
         list: List of ids of the confluent connected components.
     """
     # Remove background 0s
-    instances = np.unique(instance_segmentation)[1:]
+    instances = np.unique(instance_segmentation[instance_segmentation != 0])
     num_instances = len(instances)
 
     binary_segmentation = np.copy(instance_segmentation)
     binary_segmentation[binary_segmentation > 0] = 1
 
     connected_components, num_connected_components = label(binary_segmentation)
-    connected_component_ids = np.unique(connected_components)[1:]  # Remove background 0s
+    connected_component_ids = np.unique(connected_components[connected_components != 0])  # Remove background 0s
 
     if num_connected_components == num_instances:
         # No confluent lesions found
@@ -438,24 +438,24 @@ def compute_metrics(args):
         print("Either prediction or reference path doesn't exist!")
         return
 
-    metrics_dict = {"Subject_ID": [], "File": []}
-    if args.dsc or args.all: metrics_dict["DSC"] = []
-    if args.pq or args.all: metrics_dict["PQ"] = []
-    if args.fbeta or args.all: metrics_dict["Fbeta"] = []
-    if args.ltpr or args.all: metrics_dict["LTPR"] = []
-    if args.ppv or args.all: metrics_dict["PPV"] = []
-    if args.dice_per_tp or args.all: metrics_dict["Dice_Per_TP"] = []
-    if args.pred_count or args.all: metrics_dict["Pred_Lesion_Count"] = []
-    if args.ref_count or args.all: metrics_dict["Ref_Lesion_Count"] = []
-    if args.dic or args.all: metrics_dict["DiC"] = []
-    if args.clr or args.all: metrics_dict["CLR"] = []
-    if args.dice_per_tp_cl or args.all: metrics_dict["Dice_Per_TP_CL"] = []
-    # if args.clm or args.all: metrics_dict["CLM"] = []
+    metrics_dict = {"Subject_ID": [],
+                    "File": [],
+                    "DSC": [],
+                    "PQ": [],
+                    "Fbeta": [],
+                    "recall": [],
+                    "precision": [],
+                    "Dice_Per_TP": [],
+                    "Pred_Lesion_Count": [],
+                    "Ref_Lesion_Count": [],
+                    "DiC": [],
+                    "CLR": [],
+                    "Dice_Per_TP_CL": [],
+                    "CL_Count": []}
     all_pred_matches = {"Subject_ID": [], "Lesion_ID": [], "Ref_Lesion_ID_Match": [], "Volume_Pred": [],
                         "Volume_Ref": [], "DSC": []}
     all_ref_matches = {"Subject_ID": [], "Lesion_ID": [], "Pred_Lesion_ID_Match": [], "Volume_Ref": [],
                        "Volume_Pred": [], "DSC": []}
-    metrics_dict["CL_Count"] = []
 
     dd = "test" if args.test else "val"
     ref_dir = os.path.join(args.ref_path, dd, "labels")
@@ -483,66 +483,69 @@ def compute_metrics(args):
 
             metrics_dict["Subject_ID"].append(subj_id)
             metrics_dict["File"].append(pred_file)
-            if args.dsc or args.all:
-                dsc = dice_metric((ref_img > 0).astype(np.uint8), (pred_img > 0).astype(np.uint8))
-                metrics_dict["DSC"].append(dsc)
-            if args.pq or args.all:
-                pq_val = panoptic_quality(pred=pred_img, ref=ref_img,
-                                          matched_pairs=matched_pairs, unmatched_pred=unmatched_pred,
-                                          unmatched_ref=unmatched_ref)
-                metrics_dict["PQ"].append(pq_val)
-            if args.fbeta or args.all:
-                fbeta_val = f_beta_score(matched_pairs=matched_pairs, unmatched_pred=unmatched_pred,
-                                         unmatched_ref=unmatched_ref)
-                metrics_dict["Fbeta"].append(fbeta_val)
-            if args.ltpr or args.all:
-                ltpr_val = ltpr(matched_pairs=matched_pairs, unmatched_ref=unmatched_ref)
-                metrics_dict["LTPR"].append(ltpr_val)
-            if args.ppv or args.all:
-                ppv_val = ppv(matched_pairs=matched_pairs, unmatched_pred=unmatched_pred)
-                metrics_dict["PPV"].append(ppv_val)
-            if args.dice_per_tp or args.all:
-                dice_scores = dice_per_tp(pred_img, ref_img, matched_pairs)
-                # Assuming you want the average Dice score per subject
-                avg_dice = sum(dice_scores) / len(dice_scores) if dice_scores else 0
-                metrics_dict["Dice_Per_TP"].append(avg_dice)
-            if args.pred_count or args.all:
-                metrics_dict["Pred_Lesion_Count"].append(pred_lesion_count(pred_img))
-            if args.ref_count or args.all:
-                metrics_dict["Ref_Lesion_Count"].append(ref_lesion_count(ref_img))
-            if args.dic or args.all:
-                metrics_dict["DiC"].append(DiC(pred_img, ref_img))
-            if args.clr or args.dice_per_tp_cl or args.all:
-                confluents_ref_img = np.copy(ref_img)
-                cl_ids = find_confluent_lesions(confluents_ref_img)
 
-                # set all other ids to 0 in ref_img
-                for id in np.unique(confluents_ref_img):
-                    if id not in cl_ids:
-                        confluents_ref_img[confluents_ref_img == id] = 0
+            ### Compute metrics ###
+            # Dice score
+            dsc = dice_metric((ref_img > 0).astype(np.uint8), (pred_img > 0).astype(np.uint8))
+            metrics_dict["DSC"].append(dsc)
 
-                matched_pairs_cl, unmatched_pred_cl, unmatched_ref_cl = match_instances(pred_img, confluents_ref_img)
+            # PQ
+            pq_val = panoptic_quality(pred=pred_img, ref=ref_img,
+                                      matched_pairs=matched_pairs, unmatched_pred=unmatched_pred,
+                                      unmatched_ref=unmatched_ref)
+            metrics_dict["PQ"].append(pq_val)
 
-                clm = len(cl_ids)
-                metrics_dict["CL_Count"].append(clm)
-                if args.clr or args.all:
-                    if clm == 0:
-                        metrics_dict["CLR"].append(np.nan)
-                    else:
-                        clr = ltpr(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
-                        metrics_dict["CLR"].append(clr)
-                if args.dice_per_tp_cl or args.all:
-                    if clm == 0:
-                        metrics_dict["Dice_Per_TP_CL"].append(np.nan)
-                    else:
-                        dice_scores_cl = dice_per_tp(pred_img, confluents_ref_img, matched_pairs_cl)
-                        # Assuming you want the average Dice score per subject
-                        avg_dice_cl = sum(dice_scores_cl) / len(dice_scores_cl) if dice_scores_cl else 0
-                        metrics_dict["Dice_Per_TP_CL"].append(avg_dice_cl)
+            # F-beta score
+            fbeta_val = f_beta_score(matched_pairs=matched_pairs, unmatched_pred=unmatched_pred,
+                                     unmatched_ref=unmatched_ref)
+            metrics_dict["Fbeta"].append(fbeta_val)
 
+            # Recall and Precision
+            recall_val = recall(matched_pairs=matched_pairs, unmatched_ref=unmatched_ref)
+            metrics_dict["recall"].append(recall_val)
+            precision_val = precision(matched_pairs=matched_pairs, unmatched_pred=unmatched_pred)
+            metrics_dict["precision"].append(precision_val)
+
+            # Additional metrics
+            dice_scores = dice_per_tp(pred_img, ref_img, matched_pairs)
+            avg_dice = sum(dice_scores) / len(dice_scores) if dice_scores else 0 # average per patient
+            metrics_dict["Dice_Per_TP"].append(avg_dice)
+            metrics_dict["Pred_Lesion_Count"].append(pred_lesion_count(pred_img))
+            metrics_dict["Ref_Lesion_Count"].append(ref_lesion_count(ref_img))
+            metrics_dict["DiC"].append(DiC(pred_img, ref_img))
+
+            ### Confluent lesions Metrics ###
+            confluents_ref_img = np.copy(ref_img)
+            cl_ids = find_confluent_lesions(confluents_ref_img)
+
+            # set all other ids to 0 in ref_img
+            for id in np.unique(confluents_ref_img):
+                if id not in cl_ids:
+                    confluents_ref_img[confluents_ref_img == id] = 0
+
+            matched_pairs_cl, unmatched_pred_cl, unmatched_ref_cl = match_instances(pred_img, confluents_ref_img)
+
+            clm = len(cl_ids)
+            metrics_dict["CL_Count"].append(clm)
+            if args.clr or args.all:
+                if clm == 0:
+                    metrics_dict["CLR"].append(np.nan)
+                else:
+                    clr = recall(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
+                    metrics_dict["CLR"].append(clr)
+            if args.dice_per_tp_cl or args.all:
+                if clm == 0:
+                    metrics_dict["Dice_Per_TP_CL"].append(np.nan)
+                else:
+                    dice_scores_cl = dice_per_tp(pred_img, confluents_ref_img, matched_pairs_cl)
+                    # Assuming you want the average Dice score per subject
+                    avg_dice_cl = sum(dice_scores_cl) / len(dice_scores_cl) if dice_scores_cl else 0
+                    metrics_dict["Dice_Per_TP_CL"].append(avg_dice_cl)
+
+            ## Per lesion match & volume information ##
             # Store for every predicted lesion the potential match in the reference annotation,
             # along with both lesion volumes
-            all_pred_labels, all_pred_counts = [m[1:] for m in np.unique(pred_img, return_counts=True)]
+            all_pred_labels, all_pred_counts = np.unique(pred_img[pred_img != 0], return_counts=True)
             pred_to_ref_matches = dict(matched_pairs)
 
             # If it was not already computed, compute the dice scores for each TP predicted lesion
@@ -570,7 +573,7 @@ def compute_metrics(args):
 
             # Store for every lesion in the reference annotation the potential match in the predicted instance map,
             # along with both lesion volumes
-            all_ref_labels, all_ref_counts = [m[1:] for m in np.unique(ref_img, return_counts=True)]
+            all_ref_labels, all_ref_counts = np.unique(ref_img[ref_img != 0], return_counts=True)
             ref_to_pred_matches = {v: k for k, v in dict(matched_pairs).items()}
             for rid, volume_ref in zip(all_ref_labels, all_ref_counts):
                 all_ref_matches["Subject_ID"].append(subj_id)
@@ -592,13 +595,14 @@ def compute_metrics(args):
                 all_ref_matches["DSC"].append(this_pairs_dsc)
 
     model_name = os.path.basename(os.path.dirname(args.pred_path))
+
     # Convert dictionary to dataframe and save as CSV
     df = pd.DataFrame(metrics_dict)
     df.to_csv(os.path.join(args.pred_path, f"metrics_{model_name}_{dd}.csv"), index=False)
 
+    # Save the per lesion matches
     df = pd.DataFrame(all_pred_matches)
     df.to_csv(os.path.join(args.pred_path, f"predicted_lesions_matches_{model_name}_{dd}.csv"), index=False)
-
     df = pd.DataFrame(all_ref_matches)
     df.to_csv(os.path.join(args.pred_path, f"reference_lesions_matches_{model_name}_{dd}.csv"), index=False)
 
@@ -611,21 +615,6 @@ if __name__ == "__main__":
     parser.add_argument("--minimum_lesion_size", default=14,
                         help="Minimum lesion size.")
     parser.add_argument("--test", action="store_true", help="Wether to use the test data or not. Default is val data.")
-    parser.add_argument("--dsc", action="store_true", help="Compute Dice Score (DSC).")
-    parser.add_argument("--pq", action="store_true", help="Compute Panoptic Quality (PQ).")
-    parser.add_argument("--fbeta", action="store_true", help="Compute F-beta score.")
-    parser.add_argument("--ltpr", action="store_true", help="Compute Lesion True Positive Rate (LTPR).")
-    parser.add_argument("--ppv", action="store_true", help="Compute Positive Predictive Value (PPV).")
-    parser.add_argument("--dice_per_tp", action="store_true", help="Compute Dice score for each true positive lesion.")
-    parser.add_argument("--pred_count", action="store_true", help="Retrieve the predicted lesion count.")
-    parser.add_argument("--ref_count", action="store_true", help="Retrieve the reference lesion count.")
-    parser.add_argument("--dic", action="store_true", help="Compute the absolute difference in lesion counting.")
-    parser.add_argument("--clr", action="store_true", help="Compute confluent lesion recall.")
-    parser.add_argument("--dice_per_tp_cl", action="store_true",
-                        help="Compute Dice score for each true positive confluent lesion.")
-    parser.add_argument("--clm", action="store_true",
-                        help="Compute CLM (Placeholder for next big metric, currently number of confluent lesions).")
-    parser.add_argument("--all", action="store_true", help="Compute all available metrics.")
 
     args = parser.parse_args()
     compute_metrics(args)
