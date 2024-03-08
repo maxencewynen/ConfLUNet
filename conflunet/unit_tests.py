@@ -305,6 +305,59 @@ class TestComputeHessianEigenvalues(unittest.TestCase):
         self.assertTrue(np.allclose(eigenvalues, np.zeros_like(eigenvalues)))
 
 
+class TestIsTooSmallFunction(unittest.TestCase):
+    def test_lesion_is_too_small_volume(self):
+        segmentation = np.zeros((10, 10, 10))
+        segmentation[1:3, 1:3, 1:3] = 1  # 8 voxels
+        self.assertTrue(is_too_small(segmentation, 1, (1, 1, 1), 14, 3))
+
+    def test_lesion_is_not_too_small_volume(self):
+        segmentation = np.zeros((10, 10, 10))
+        segmentation[1:4, 1:4, 1:4] = 1  # 27 voxels
+        self.assertFalse(is_too_small(segmentation, 1, (1, 1, 1), 14, 3))
+
+    def test_lesion_is_too_small_along_an_axis(self):
+        segmentation = np.zeros((10, 10, 10))
+        segmentation[1:4, 1:4, 1] = 1  # Single layer
+        self.assertTrue(is_too_small(segmentation, 1, (1, 1, 1), 14, 3))
+
+    def test_lesion_is_not_too_small_along_any_axis(self):
+        segmentation = np.zeros((10, 10, 10))
+        segmentation[1:5, 1:5, 1:5] = 1  # Not too small along any axis
+        self.assertFalse(is_too_small(segmentation, 1, (1, 1, 1), 14, 3))
+
+    def test_lesion_id_not_present(self):
+        segmentation = np.zeros((10, 10, 10))
+        self.assertTrue(is_too_small(segmentation, 99, (1, 1, 1), 14, 3),
+                        "Lesion ID not present should be considered too small")
+
+    def test_invalid_voxel_size(self):
+        segmentation = np.zeros((10, 10, 10))
+        with self.assertRaises(AssertionError):
+            is_too_small(segmentation, 1, "invalid", 14, 3)
+
+    def test_invalid_voxel_size_length(self):
+        segmentation = np.zeros((10, 10, 10))
+        with self.assertRaises(AssertionError):
+            is_too_small(segmentation, 1, (1, 1), 14, 3)
+
+    def test_2D_segmentation(self):
+        segmentation = np.zeros((10, 10))
+        segmentation[1:4, 1:4] = 1 # 9 voxels in 2D
+        self.assertFalse(is_too_small(segmentation, 1, (1, 1), 5, 3),
+                         "2D lesion should not be considered too small if it meets minimum axis requirement")
+
+    def test_lesion_meets_minimum_size_but_too_small_along_axis(self):
+        segmentation = np.zeros((10, 10, 10))
+        segmentation[1:10, 1:2, 1:2] = 1  # Meets minimum size but too small along two axes
+        self.assertTrue(is_too_small(segmentation, 1, (1, 1, 1), 14, 3))
+
+    def test_lesion_fills_entire_segmentation(self):
+        segmentation = np.ones((10, 10, 10))
+        self.assertFalse(is_too_small(segmentation, 1, (1, 1, 1), 14, 3),
+                         "Lesion that fills the entire segmentation should not be considered too small")
+
+
 class TestPostprocessProbabilitySegmentation(unittest.TestCase):
     def test_output_shape(self):
         # Generate a random probability segmentation
@@ -342,53 +395,54 @@ class TestRemoveSmallLesionsFromInstanceSegmentation(unittest.TestCase):
 
         self.voxel_size = (1, 1, 1)
         self.l_min = 10
+        self.minimum_size_along_axis = 0
 
     def test_output_shape(self):
         # Test if the output shape matches the input shape
-        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, self.voxel_size, self.l_min)
+        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, self.voxel_size, self.l_min, self.minimum_size_along_axis)
         self.assertEqual(processed_segmentation.shape, self.instance_segmentation.shape)
 
     def test_output_type(self):
         # Test if the output type matches the input type
-        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, self.voxel_size, self.l_min)
+        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, self.voxel_size, self.l_min, self.minimum_size_along_axis)
         self.assertTrue(isinstance(processed_segmentation, np.ndarray))
 
     def test_voxel_size_type(self):
         # Test if the function raises an error for invalid voxel size type
         with self.assertRaises(AssertionError):
-            remove_small_lesions_from_instance_segmentation(self.instance_segmentation, [1, 1, 1], self.l_min)
+            remove_small_lesions_from_instance_segmentation(self.instance_segmentation, [1, 1, 1], self.l_min, self.minimum_size_along_axis)
 
     def test_voxel_size_length(self):
         # Test if the function raises an error for invalid voxel size length
         with self.assertRaises(AssertionError):
-            remove_small_lesions_from_instance_segmentation(self.instance_segmentation, (1, 1), self.l_min)
+            remove_small_lesions_from_instance_segmentation(self.instance_segmentation, (1, 1), self.l_min, self.minimum_size_along_axis)
 
     def test_remove_small_lesions_from_instance_segmentation_unit_voxel_size(self):
         # Test if the small lesion is removed and larger lesion is retained when using a unit voxel size
-        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, self.voxel_size, self.l_min)
+        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, self.voxel_size, self.l_min, self.minimum_size_along_axis)
         self.assertEqual([0, 1], np.unique(processed_segmentation).tolist())
 
     def test_remove_small_lesions_from_instance_segmentation_small_voxel_size(self):
         # Test if the small lesion is removed and larger lesion is retained when using a small voxel size
         voxel_size = (0.8, 0.8, 0.8)
-        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, voxel_size, self.l_min)
+        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, voxel_size, self.l_min, 3)
         self.assertEqual([0], np.unique(processed_segmentation).tolist())
 
     def test_remove_small_lesions_from_instance_segmentation_large_voxel_size(self):
         # Test if the small lesion is removed and larger lesion is retained when using a large voxel size
         voxel_size = (2, 2, 2)
-        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, voxel_size, self.l_min)
+        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, voxel_size, self.l_min, self.minimum_size_along_axis)
         self.assertEqual([0, 1, 2], np.unique(processed_segmentation).tolist())
 
     def test_remove_small_lesions_from_instance_segmentation(self):
         # Test if the small lesion is removed and larger lesion is retained when using a normal l_min value
-        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, self.voxel_size, self.l_min)
+        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, self.voxel_size, self.l_min, self.minimum_size_along_axis)
         self.assertEqual([0, 1], np.unique(processed_segmentation).tolist())
 
     def test_remove_small_lesions_from_instance_segmentation_for_lesions_smaller_than_3mm_in_any_axis(self):
         # Test if the small lesion is removed and larger lesion is retained when using a small l_min value
         l_min = 1
-        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, self.voxel_size, l_min)
+        processed_segmentation = remove_small_lesions_from_instance_segmentation(self.instance_segmentation, self.voxel_size, l_min, minimum_size_along_axis=3)
         self.assertEqual([0, 1], np.unique(processed_segmentation).tolist()) # 2 should be removed because it is smaller than 3mm in one direction
 
     def test_remove_small_lesions_from_instance_segmentation_large_l_min(self):
@@ -875,23 +929,23 @@ class TestRefineInstanceSegmentation(unittest.TestCase):
         ])
         l_min = 2
         expected_output = instance_mask.copy()
-        output = refine_instance_segmentation(instance_mask, l_min)
+        output = refine_instance_segmentation(instance_mask, voxel_size=(1, 1), l_min=l_min, minimum_size_along_axis=0)
         np.testing.assert_array_equal(expected_output, output, "Instance mask should not change.")
 
     def test_remove_small_instances(self):
         """Test removing instances smaller than l_min."""
         instance_mask = np.array([
-            [1, 1, 0],
+            [1, 1, 1],
             [2, 0, 0],
             [0, 0, 0]
         ])
         l_min = 2
         expected_output = np.array([
-            [1, 1, 0],
+            [1, 1, 1],
             [0, 0, 0],
             [0, 0, 0]
         ])
-        output = refine_instance_segmentation(instance_mask, l_min)
+        output = refine_instance_segmentation(instance_mask, voxel_size=(1, 1), l_min=l_min, minimum_size_along_axis=0)
         np.testing.assert_array_equal(expected_output, output, "Small instances were not removed correctly.")
 
     def test_one_instance_removed(self):
@@ -903,7 +957,7 @@ class TestRefineInstanceSegmentation(unittest.TestCase):
         ])
         l_min = 2
         expected_output = np.zeros_like(instance_mask)
-        output = refine_instance_segmentation(instance_mask, l_min)
+        output = refine_instance_segmentation(instance_mask, voxel_size=(1, 1), l_min=l_min, minimum_size_along_axis=0)
         np.testing.assert_array_equal(expected_output, output, "All instances should have been removed.")
 
     def test_larger_instance_with_disconnected_parts(self):
@@ -915,7 +969,7 @@ class TestRefineInstanceSegmentation(unittest.TestCase):
             [3, 3, 3, 0, 0],
             [0, 0, 0, 4, 4]
         ])
-        l_min = 3
+        l_min = 2
         # Expect smaller part of instance 3 to be removed, and instance 4 to be kept as is.
         expected_output = np.array([
             [1, 1, 0, 0, 0],
@@ -924,9 +978,62 @@ class TestRefineInstanceSegmentation(unittest.TestCase):
             [3, 3, 3, 0, 0],
             [0, 0, 0, 0, 0]
         ])
-        output = refine_instance_segmentation(instance_mask, l_min)
+        output = refine_instance_segmentation(instance_mask, voxel_size=(1, 1), l_min=l_min, minimum_size_along_axis=0)
         np.testing.assert_array_equal(output, expected_output,
                                       "Larger instance with disconnected parts was not processed correctly.")
+
+    def test_remove_small_instances(self):
+
+        """Test removing instances smaller than l_min."""
+        instance_mask = np.array([
+            [1, 1, 1],
+            [2, 0, 0],
+            [0, 0, 3]
+        ])
+        l_min = 2
+        expected_output = np.array([
+            [1, 1, 1],
+            [0, 0, 0],
+            [0, 0, 0]
+        ])
+        output = refine_instance_segmentation(instance_mask, voxel_size=(1, 1), l_min=l_min, minimum_size_along_axis=0)
+        np.testing.assert_array_equal(expected_output, output, "Small instances were not removed correctly.")
+
+    def test_all_instances_removed(self):
+        """Test with all instances being smaller than l_min."""
+        instance_mask = np.array([
+            [1, 0, 0],
+            [2, 0, 0],
+            [3, 0, 0]
+        ])
+        l_min = 1
+        expected_output = np.zeros_like(instance_mask)
+        output = refine_instance_segmentation(instance_mask, voxel_size=(1, 1), l_min=l_min, minimum_size_along_axis=0)
+        np.testing.assert_array_equal(output, expected_output, "All instances should have been removed.")
+
+    def test_relabel_disconnected_components_same_size(self):
+        """Test relabeling disconnected components within the same instance."""
+        instance_mask = np.array([
+            [1, 1, 0, 0, 2],
+            [0, 0, 0, 2, 2],
+            [1, 1, 0, 0, 2]
+        ])
+        l_min = 1
+        output = refine_instance_segmentation(instance_mask, voxel_size=(1, 1), l_min=l_min, minimum_size_along_axis=0)
+        unique_values = np.unique(output[output != 0])
+        np.testing.assert_array_equal([1, 2, 3], unique_values, "Expected 3 unique values.")
+
+    def test_relabel_disconnected_components_different_sizes(self):
+        """Test relabeling disconnected components within the same instance."""
+        instance_mask = np.array([
+            [1, 1, 1, 0, 2],
+            [0, 0, 0, 2, 2],
+            [1, 1, 0, 0, 2]
+        ])
+        l_min = 1
+        output = refine_instance_segmentation(instance_mask,  voxel_size=(1, 1), l_min=l_min, minimum_size_along_axis=0)
+        unique_values = np.unique(output[output != 0])
+        np.testing.assert_array_equal([1, 2, 3], unique_values, "Expected 3 unique values.")
 
 
 class TestPostProcess(unittest.TestCase):

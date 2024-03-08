@@ -527,20 +527,16 @@ def compute_metrics(args):
 
             clm = len(cl_ids)
             metrics_dict["CL_Count"].append(clm)
-            if args.clr or args.all:
-                if clm == 0:
-                    metrics_dict["CLR"].append(np.nan)
-                else:
-                    clr = recall(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
-                    metrics_dict["CLR"].append(clr)
-            if args.dice_per_tp_cl or args.all:
-                if clm == 0:
-                    metrics_dict["Dice_Per_TP_CL"].append(np.nan)
-                else:
-                    dice_scores_cl = dice_per_tp(pred_img, confluents_ref_img, matched_pairs_cl)
-                    # Assuming you want the average Dice score per subject
-                    avg_dice_cl = sum(dice_scores_cl) / len(dice_scores_cl) if dice_scores_cl else 0
-                    metrics_dict["Dice_Per_TP_CL"].append(avg_dice_cl)
+            if clm == 0:
+                metrics_dict["CLR"].append(np.nan)
+                metrics_dict["Dice_Per_TP_CL"].append(np.nan)
+            else:
+                clr = recall(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
+                metrics_dict["CLR"].append(clr)
+
+                dice_scores_cl = dice_per_tp(pred_img, confluents_ref_img, matched_pairs_cl)
+                avg_dice_cl = sum(dice_scores_cl) / len(dice_scores_cl) if dice_scores_cl else 0
+                metrics_dict["Dice_Per_TP_CL"].append(avg_dice_cl)
 
             ## Per lesion match & volume information ##
             # Store for every predicted lesion the potential match in the reference annotation,

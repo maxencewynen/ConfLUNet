@@ -7,6 +7,38 @@ from typing import Tuple, Union
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 
 
+def is_too_small(instance_segmentation: np.array, lesion_id: int, voxel_size: Tuple[float, float, float] = (1, 1, 1),
+                  l_min: int = 14, minimum_size_along_axis: int = 3):
+    """
+    Check if a lesion is too small to be considered a real lesion.
+    Args:
+        instance_segmentation (np.array): The instance mask.
+        lesion_id (int): The id of the lesion to be checked.
+        voxel_size (Tuple[float, float, float], optional): The voxel size along each axis.
+        l_min (int, optional): The minimum size of a lesion in mm^3.
+        minimum_size_along_axis (int, optional): The minimum size of a lesion along each axis.
+    """
+    assert type(voxel_size) == tuple, "Voxel size should be a tuple"
+    assert len(voxel_size) == len(instance_segmentation.shape), "Voxel size should be a tuple of same length as the " \
+                                                            "instance segmentation shape tuple"
+
+    this_instance_indices = np.where(instance_segmentation == lesion_id)
+    if len(this_instance_indices[0]) == 0:
+        return True
+    size_along_x = (1 + max(this_instance_indices[0]) - min(this_instance_indices[0])) * voxel_size[0]
+    size_along_y = (1 + max(this_instance_indices[1]) - min(this_instance_indices[1])) * voxel_size[1]
+    if len(this_instance_indices) == 3:
+        size_along_z = (1 + max(this_instance_indices[2]) - min(this_instance_indices[2])) * voxel_size[2]
+        # if the connected component is smaller than 3mm in any direction, skip it as it is not
+        # clinically considered a lesion
+        if size_along_x < minimum_size_along_axis or size_along_y < minimum_size_along_axis or size_along_z < minimum_size_along_axis:
+            return True
+    elif size_along_x < minimum_size_along_axis or size_along_y < minimum_size_along_axis:
+        return True
+
+    return len(this_instance_indices[0]) * np.prod(voxel_size) <= l_min
+
+
 def compute_hessian_eigenvalues(image, sigma=1):
     """
     Compute the eigenvalues of the Hessian matrix of an image.
@@ -54,19 +86,21 @@ def postprocess_probability_segmentation(probability_segmentation: np.ndarray, t
 
 
 def remove_small_lesions_from_instance_segmentation(instance_segmentation: np.ndarray, voxel_size: Tuple[float, float, float],
-                                                    l_min: int = 14) -> np.ndarray:
+                                                    l_min: int = 14, minimum_size_along_axis: int = 3) -> np.ndarray:
     """
     Remove all lesions with less volume than `l_min` from an instance segmentation mask `instance_segmentation`.
     Args:
-        instance_segmentation: `numpy.ndarray` of shape [H, W, D], with a binary lesions segmentation mask.
-        voxel_size: `tuple` of length 3, with the voxel size in mm.
+        instance_segmentation: `numpy.ndarray` of shape (H, W[, D]), with a binary lesions segmentation mask.
+        voxel_size: `tuple` with the voxel size in mm.
         l_min:  `int`, minimal volume of a lesion.
+        minimum_size_along_axis: `int`, minimal size of a lesion along any axis.
     Returns:
-        Instance lesion segmentation mask (`numpy.ndarray` of shape [H, W, D])
+        Instance lesion segmentation mask (`numpy.ndarray` of shape (H, W, D]))
     """
 
     assert type(voxel_size) == tuple, "Voxel size should be a tuple"
-    assert len(voxel_size) == 3, "Voxel size should be a tuple of length 3"
+    assert len(voxel_size) == len(instance_segmentation.shape), "Voxel size should be a tuple of same length as the " \
+                                                                  "instance segmentation shape tuple"
 
     label_list, label_counts = np.unique(instance_segmentation, return_counts=True)
 
@@ -75,30 +109,21 @@ def remove_small_lesions_from_instance_segmentation(instance_segmentation: np.nd
     for lid, lvoxels in zip(label_list, label_counts):
         if lid == 0: continue
 
-        this_instance_indices = np.where(instance_segmentation == lid)
-        size_along_x = (1 + max(this_instance_indices[0]) - min(this_instance_indices[0])) * voxel_size[0]
-        size_along_y = (1 + max(this_instance_indices[1]) - min(this_instance_indices[1])) * voxel_size[1]
-        size_along_z = (1 + max(this_instance_indices[2]) - min(this_instance_indices[2])) * voxel_size[2]
-
-        # if the connected component is smaller than 3mm in any direction, skip it as it is not
-        # clinically considered a lesion
-        if size_along_x < 3 or size_along_y < 3 or size_along_z < 3:
-            continue
-
-        if lvoxels * np.prod(voxel_size) > l_min:
+        if not is_too_small(instance_segmentation, lid, voxel_size, l_min, minimum_size_along_axis=minimum_size_along_axis):
             instance_seg2[instance_segmentation == lid] = lid
 
     return instance_seg2
 
 
 def remove_small_lesions_from_binary_segmentation(binary_segmentation: np.ndarray, voxel_size: Tuple[int, int, int],
-                                                  l_min: int = 14) -> np.ndarray:
+                                                  l_min: int = 14, minimum_size_along_axis: int = 3) -> np.ndarray:
     """
     Remove all lesions with less volume than `l_min` from a binary segmentation mask `binary_segmentation`.
     Args:
         binary_segmentation: `numpy.ndarray` of shape [H, W, D], with a binary lesions segmentation mask.
         voxel_size: `tuple` of length 3, with the voxel size in mm.
         l_min:  `int`, minimal volume of a lesion.
+        minimum_size_along_axis: `int`, minimal size of a lesion along any axis.
     Returns:
         Binary lesion segmentation mask (`numpy.ndarray` of shape [H, W, D])
     """
@@ -111,25 +136,12 @@ def remove_small_lesions_from_binary_segmentation(binary_segmentation: np.ndarra
         f"Segmentation should be {0, 1} but got {unique_values}"
 
     labeled_seg, num_labels = label(binary_segmentation)
-    label_list = np.unique(labeled_seg)
-    num_elements_by_lesion = labeled_comprehension(binary_segmentation, labeled_seg, label_list, np.sum, float, 0)
 
     seg2 = np.zeros_like(binary_segmentation)
-    for i_el, n_el in enumerate(num_elements_by_lesion):
-        this_instance_indices = np.where(labeled_seg == i_el)
-        this_instance_mask = np.stack(this_instance_indices, axis=1)
-
-        size_along_x = (1 + max(this_instance_indices[0]) - min(this_instance_indices[0])) * voxel_size[0]
-        size_along_y = (1 + max(this_instance_indices[1]) - min(this_instance_indices[1])) * voxel_size[1]
-        size_along_z = (1 + max(this_instance_indices[2]) - min(this_instance_indices[2])) * voxel_size[2]
-
-        # if the connected component is smaller than 3 voxels in any direction, skip it as it is not
-        # clinically considered a lesion
-        if size_along_x < 3 or size_along_y < 3 or size_along_z < 3:
-            continue
-
-        lesion_size = n_el * np.prod(voxel_size)
-        if lesion_size > l_min:
+    for i_el in range(1, num_labels + 1):
+        if not is_too_small(labeled_seg, i_el, voxel_size, l_min, minimum_size_along_axis=minimum_size_along_axis):
+            this_instance_indices = np.where(labeled_seg == i_el)
+            this_instance_mask = np.stack(this_instance_indices, axis=1)
             current_voxels = this_instance_mask
             seg2[current_voxels[:, 0],
             current_voxels[:, 1],
@@ -353,39 +365,82 @@ def group_pixels(ctr: torch.Tensor, offsets: torch.Tensor, compute_voting: bool 
     return instance_id
 
 
-def refine_instance_segmentation(instance_mask: np.ndarray, l_min: int = 14) -> np.ndarray:
+def refine_instance_segmentation(instance_mask: np.ndarray, voxel_size: Tuple[int, int, int] = (1, 1, 1),
+                                 l_min: int = 14, minimum_size_along_axis: int = 3) -> np.ndarray:
     """
     Refines the instance segmentation by relabeling disconnected components in instances
-    and removing instances smaller than l_min
+    and removing ALL instances strictly smaller than l_min
     Args:
         instance_mask: np.ndarray of dimension (H,W,D), array of instance ids
+        voxel_size: tuple of length 3, with the voxel size in mm
         l_min: minimum lesion size
+        minimum_size_along_axis: minimal size of a lesion along any axis
     """
+    assert type(voxel_size) == tuple, "Voxel size should be a tuple"
+    assert len(voxel_size) == len(instance_mask.shape), "Voxel size should be a tuple of same length as the " \
+                                                        "instance segmentation shape tuple"
+
     iids = np.unique(instance_mask[instance_mask != 0])
     max_instance_id = np.max(instance_mask)
+    resulting_instance_mask = np.copy(instance_mask)
+
     # for every instance id
     for iid in iids:
         # get the mask
         mask = (instance_mask == iid)
         components, n_components = label(mask)
-        if n_components > 1:  # if the lesion is split in n components
-            biggest_lesion_size = 0
-            biggest_lesion_id = -1
-            for cid in range(1, n_components + 1):  # go through each component
-                component_mask = (components == cid)
-                this_size = np.sum(component_mask)
-                if this_size > biggest_lesion_size:
-                    biggest_lesion_size = this_size
-                    biggest_lesion_id = cid
-            for cid in range(1, n_components + 1):
-                if cid == biggest_lesion_id: continue
-                instance_mask[components == cid] = 0
+        if n_components == 1: # if the lesion is not split in components
+            # check if the lesion is too small
+            if is_too_small(components, 1, voxel_size, l_min, minimum_size_along_axis=minimum_size_along_axis):
+                resulting_instance_mask[mask] = 0
+                # shift all lesion ids that are bigger than this one by 1. Not necessary but it provides a
+                # instance mask where the ids are contiguous
+                if iid != max_instance_id:
+                    for k in range(iid + 1, max_instance_id + 1):
+                        resulting_instance_mask[instance_mask == k] = k - 1
+                    max_instance_id -= 1
+            continue
 
-        elif np.sum(mask) < l_min:  # check if lesion size is too small or not
-            instance_mask[mask] = 0
-            instance_mask[instance_mask == max_instance_id] = iid
-            max_instance_id -= 1
-    return instance_mask
+        elif n_components > 1:  # if the lesion is split in n components
+            # first get the ids and sizes of the different connected components and sort them by size
+            this_ids_components_ids, this_ids_components_sizes = np.unique(components[components != 0], return_counts=True)
+            sorted_indices = np.argsort(-this_ids_components_sizes)
+            sorted_this_ids_components_ids = this_ids_components_ids[sorted_indices]
+            sorted_this_ids_components_sizes = this_ids_components_sizes[sorted_indices]
+
+            previous_component_is_too_small = False
+            # iterate through the different connected components of the lesion
+            for j, (cid, csize) in enumerate(zip(sorted_this_ids_components_ids, sorted_this_ids_components_sizes)):
+                if previous_component_is_too_small: # since the components are sorted by size, if the previous one is too small, all the others are too
+                    resulting_instance_mask[components == cid] = 0
+                    continue
+
+                this_component_is_too_small = is_too_small(components, cid, voxel_size, l_min, minimum_size_along_axis=minimum_size_along_axis)
+
+                # if the component is too small, and it is the first one, we remove the whole lesion
+                if j == 0 and this_component_is_too_small:
+                    resulting_instance_mask[mask] = 0
+                    if iid != max_instance_id:
+                        # shift all lesion ids that are bigger than this one by 1. Not necessary but it provides a
+                        # instance mask where the ids are contiguous
+                        for k in range(iid + 1, max_instance_id + 1):
+                            resulting_instance_mask[instance_mask == k] = k - 1
+                        max_instance_id -= 1
+                    break
+
+                # if the component is too small and it is not the first one, we remove it
+                if this_component_is_too_small:
+                    resulting_instance_mask[components == cid] = 0
+                    previous_component_is_too_small = True
+                    continue
+
+                # if j == 0 it means that the first component, associated with iid, is large enough and we do not need to do change the id
+                # the component is large enough, but basically no center was found in it
+                # In this case, we choose to keep it
+                if j != 0:
+                    resulting_instance_mask[components == cid] = max_instance_id + 1
+                    max_instance_id += 1
+    return resulting_instance_mask
 
 
 def calibrate_offsets(offsets: torch.Tensor, centers: np.ndarray) -> torch.Tensor:
@@ -462,8 +517,7 @@ def postprocess(semantic_mask: np.ndarray,
         voting_image = None
 
     instance_mask = np.squeeze(instance_ids.cpu().numpy().astype(np.int32)) * semantic_mask
-    instance_mask = remove_small_lesions_from_instance_segmentation(instance_mask, voxel_size=voxel_size, l_min=l_min)
-    instance_mask = refine_instance_segmentation(instance_mask, l_min=l_min)
+    instance_mask = refine_instance_segmentation(instance_mask, voxel_size=voxel_size, l_min=l_min)
 
     ret = (instance_mask, centers_mx.astype(np.uint8))
     ret += (voting_image.cpu().numpy().astype(np.int16),) if compute_voting else ()
