@@ -175,7 +175,8 @@ class ConfLUNet(nn.Module):
         """
         for m in self.modules():
             if isinstance(m, torch.nn.Conv3d):
-                torch.nn.init.normal_(m.weight, std=0.001)
+                # torch.nn.init.normal_(m.weight, std=0.001)
+                torch.nn.init.kaiming_normal_(m.weight)
             elif isinstance(m, torch.nn.BatchNorm3d):
                 torch.nn.init.constant_(m.weight, 1)
                 torch.nn.init.constant_(m.bias, 0)
@@ -235,7 +236,8 @@ class UNet3D(nn.Module):
     def _init_parameters(self):
         for m in self.modules():
             if isinstance(m, torch.nn.Conv3d):
-                torch.nn.init.normal_(m.weight, std=0.001)
+                # torch.nn.init.normal_(m.weight, std=0.001)
+                torch.nn.init.kaiming_normal_(m.weight)
             elif isinstance(m, torch.nn.BatchNorm3d):
                 torch.nn.init.constant_(m.weight, 1)
                 torch.nn.init.constant_(m.bias, 0)
