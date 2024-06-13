@@ -441,6 +441,7 @@ def compute_metrics(args):
     metrics_dict = {"Subject_ID": [],
                     "File": [],
                     "DSC": [],
+                    "nDSC": [],
                     "PQ": [],
                     "Fbeta": [],
                     "recall": [],
@@ -489,6 +490,10 @@ def compute_metrics(args):
             # Dice score
             dsc = dice_metric((ref_img > 0).astype(np.uint8), (pred_img > 0).astype(np.uint8))
             metrics_dict["DSC"].append(dsc)
+            
+            # normalized Dice score
+            ndsc = dice_metric((ref_img > 0).astype(np.uint8), (pred_img > 0).astype(np.uint8))
+            metrics_dict["nDSC"].append(ndsc)
 
             # PQ
             pq_val = panoptic_quality(pred=pred_img, ref=ref_img,
