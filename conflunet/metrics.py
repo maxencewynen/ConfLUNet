@@ -450,6 +450,7 @@ def compute_metrics(args):
                     "Ref_Lesion_Count": [],
                     "DiC": [],
                     "CLR": [],
+                    "CLP":[],
                     "Dice_Per_TP_CL": [],
                     "CL_Count": []}
     all_pred_matches = {"Subject_ID": [], "Lesion_ID": [], "Ref_Lesion_ID_Match": [], "Volume_Pred": [],
@@ -529,10 +530,13 @@ def compute_metrics(args):
             metrics_dict["CL_Count"].append(clm)
             if clm == 0:
                 metrics_dict["CLR"].append(np.nan)
+                metrics_dict["CLP"].append(np.nan)
                 metrics_dict["Dice_Per_TP_CL"].append(np.nan)
             else:
                 clr = recall(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
+                clp = precision(matched_pairs=matched_pairs_cl, unmatched_pred=unmatched_pred_cl)
                 metrics_dict["CLR"].append(clr)
+                metrics_dict["CLP"].append(clp)
 
                 dice_scores_cl = dice_per_tp(pred_img, confluents_ref_img, matched_pairs_cl)
                 avg_dice_cl = sum(dice_scores_cl) / len(dice_scores_cl) if dice_scores_cl else 0
