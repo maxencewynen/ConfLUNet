@@ -304,6 +304,23 @@ class TestComputeHessianEigenvalues(unittest.TestCase):
         # Check if the output is zero
         self.assertTrue(np.allclose(eigenvalues, np.zeros_like(eigenvalues)))
 
+    def test_inversed_curve_function(self):
+        def f(z):
+            x, y = z
+            return - ((x - 5) ** 2 + (y - 5) ** 2)
+
+        # Create a 10x10 matrix
+        image = np.zeros((10, 10))
+        for i in range(image.shape[0]):
+            for j in range(image.shape[1]):
+                image[i, j] = f((i, j))
+
+        # Compute eigenvalues of Hessian matrix
+        eigenvalues = compute_hessian_eigenvalues(image)
+        # Check if the output shape matches the input shape
+        self.assertTrue(eigenvalues[0, 5, 5] < 0)
+        self.assertTrue(eigenvalues[1, 5, 5] < 0)
+
 
 class TestIsTooSmallFunction(unittest.TestCase):
     def test_lesion_is_too_small_volume(self):
