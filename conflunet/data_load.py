@@ -417,7 +417,7 @@ def get_test_dataloader(data_dir, num_workers, cache_rate=0.1, I=['FLAIR'], appl
 
     print("Number of test files:", len(files))
     for f in files:
-        f['subject'] = os.path.basename(f[all_modality_images[I[0]][0]])[:7]
+        f['subject'] = os.path.basename(f[I[0]])[:7]
 
     ds = CacheDataset(data=files, transform=test_transforms, cache_rate=cache_rate, num_workers=num_workers)
     return DataLoader(ds, batch_size=1, shuffle=False, num_workers=num_workers)
