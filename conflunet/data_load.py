@@ -107,6 +107,35 @@ def get_val_transforms(I=['FLAIR'], bm=False, apply_mask=None):
     return Compose(transforms)
 
 
+def get_test_transforms(I=['FLAIR'], bm=False, apply_mask=None):
+    """ Get transforms for testing on FLAIR images and ground truth:
+    - Loads 3D images and masks from Nifti file
+    - Adds channel dimention
+    - Applies intensity normalisation to scans
+    - Converts to torch.Tensor()
+    """
+    other_keys = ["brain_mask"] if bm else []
+    other_keys = other_keys + [apply_mask] if apply_mask else other_keys
+
+    non_quantitative_images = [i for i in I if i not in QUANTITATIVE_SEQUENCES]
+
+    transforms = [
+        LoadImaged(keys=I + other_keys),
+        AddChanneld(keys=I + other_keys),
+        # Lambdad(keys=["label"], func=lambda x: (x>0).astype(int) ),
+    ]
+    transforms = transforms + [Lambdad(keys=["brain_mask"], func=lambda x: x.astype(np.uint8))] if bm else transforms
+    transforms = transforms + [MaskIntensityd(keys=I, mask_key=apply_mask)] if apply_mask else transforms
+
+    transforms += [
+        Lambdad(keys=["brain_mask"], func=lambda x: x.astype(np.uint8)),
+        NormalizeIntensityd(keys=non_quantitative_images, nonzero=True),
+        ToTensord(keys=I + other_keys),
+        ConcatItemsd(keys=I, name="image", dim=0)
+    ]
+    return Compose(transforms)
+
+
 def get_train_dataloader(data_dir, num_workers, cache_rate=0.1, seed=1, I=['FLAIR'], apply_mask=None):
     """
     Get dataloader for training
@@ -214,7 +243,6 @@ def get_val_dataloader(data_dir, num_workers, cache_rate=0.1, I=['FLAIR'], test=
         mask_path = pjoin(data_dir, "val", apply_mask) if not test else pjoin(data_dir, "test", apply_mask)
 
     # Collect all modality images sorted
-    all_modality_images = {}
     all_modality_images = {
         i: [
             pjoin(img_dir, s)
@@ -297,6 +325,102 @@ def get_val_dataloader(data_dir, num_workers, cache_rate=0.1, I=['FLAIR'], test=
     ds = CacheDataset(data=files, transform=val_transforms, cache_rate=cache_rate, num_workers=num_workers)
     return DataLoader(ds, batch_size=1, shuffle=True, num_workers=num_workers)
 
+
+def get_test_dataloader(data_dir, num_workers, cache_rate=0.1, I=['FLAIR'], apply_mask=None):
+    """
+    Get dataloader for testing. Either with or without brain masks.
+
+    Args:
+      data_dir: `str`, path to data directory (should contain img/ and labels/).
+      num_workers:  `int`,  number of worker threads to use for parallel processing
+                    of images
+      cache_rate:  `float` in (0.0, 1.0], percentage of cached data in total.
+      bm_path:   `None|str`. If `str`, then defines path to directory with
+                 brain masks. If `None`, dataloader does not return brain masks.
+      I: `list`, list of I to include in the data loader.
+    Returns:
+      monai.data.DataLoader() class object.
+    """
+    assert os.path.exists(data_dir), f"data_dir path does not exist ({data_dir})"
+    assert apply_mask is None or type(apply_mask) == str
+    img_dir = pjoin(data_dir, "test", "images")
+    bm_path = pjoin(data_dir, "test", "brainmasks")
+    if not apply_mask:
+        mask_path = None
+    else:
+        mask_path = pjoin(data_dir, "test", apply_mask)
+
+    # Collect all modality images sorted
+    all_modality_images = {
+        i: [
+            pjoin(img_dir, s)
+            for s in sorted(list(os.listdir(img_dir)))
+            if s.endswith(i + ".nii.gz")
+        ]
+        for i in I
+    }
+    for modality in I:
+        for j in range(len([j for j in I if j == modality])):
+            if j == 0: continue
+            all_modality_images[modality + str(j)] = all_modality_images[modality]
+
+    # Check all modalities have same length
+    assert all(len(x) == len(all_modality_images[I[0]]) for x in
+               all_modality_images.values()), "All modalities must have the same number of images"
+
+    files = []
+
+    if bm_path is not None:
+        bms = [pjoin(bm_path, f) for f in sorted(list(os.listdir(bm_path))) if f.endswith("brainmask.nii.gz")]
+        if not apply_mask:
+            assert len(all_modality_images[I[0]]) == len(bms), \
+                f"Some files must be missing: {[len(all_modality_images[I[0]]), len(bms)]}"
+
+            for i in range(len(all_modality_images[I[0]])):
+                file_dict = {"brain_mask": bms[i]}
+                for modality in all_modality_images.keys():  # in I:
+                    file_dict[modality] = all_modality_images[modality][i]
+                files.append(file_dict)
+
+        else:
+            masks = [pjoin(mask_path, f) for f in sorted(list(os.listdir(mask_path))) if f.endswith(".nii.gz")]
+            assert len(all_modality_images[I[0]]) == len(bms) == len(masks), \
+                f"Some files must be missing: {[len(all_modality_images[I[0]]), len(bms), len(masks)]}"
+
+            for i in range(len(all_modality_images[I[0]])):
+                file_dict = {"brain_mask": bms[i], apply_mask: masks[i]}
+                for modality in all_modality_images.keys():  # in I:
+                    file_dict[modality] = all_modality_images[modality][i]
+                files.append(file_dict)
+
+        test_transforms = get_test_transforms(list(all_modality_images.keys()), bm=True, apply_mask=apply_mask)
+
+    else:
+        if not apply_mask:
+            for i in range(len(all_modality_images[I[0]])):
+                file_dict = {}
+                for modality in all_modality_images.keys():  # in I:
+                    file_dict[modality] = all_modality_images[modality][i]
+                files.append(file_dict)
+        else:
+            bms = [pjoin(bm_path, f) for f in sorted(list(os.listdir(bm_path))) if f.endswith("brainmask.nii.gz")]
+            masks = [pjoin(mask_path, f) for f in sorted(list(os.listdir(mask_path))) if f.endswith(".nii.gz")]
+            assert len(all_modality_images[I[0]]) == len(bms) == len(masks), \
+                f"Some files must be missing: {[len(all_modality_images[I[0]]), len(bms), len(masks)]}"
+
+            for i in range(len(all_modality_images[I[0]])):
+                file_dict = {"brain_mask": bms[i], apply_mask: masks[i]}
+                for modality in all_modality_images.keys():  # in I:
+                    file_dict[modality] = all_modality_images[modality][i]
+                files.append(file_dict)
+        test_transforms = get_test_transforms(list(all_modality_images.keys()), apply_mask=apply_mask)
+
+    print("Number of test files:", len(files))
+    for f in files:
+        f['subject'] = os.path.basename(f[all_modality_images[I[0]][0]])[:7]
+
+    ds = CacheDataset(data=files, transform=test_transforms, cache_rate=cache_rate, num_workers=num_workers)
+    return DataLoader(ds, batch_size=1, shuffle=False, num_workers=num_workers)
 
 if __name__ == "__main__":
     pass
