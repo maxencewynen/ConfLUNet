@@ -7,7 +7,7 @@ from monai.inferers import sliding_window_inference
 from model import *
 from monai.data import write_nifti
 import numpy as np
-from data_load import get_val_dataloader
+from data_load import get_val_dataloader, get_test_dataloader
 from postprocess import *
 from metrics import dice_metric, dice_norm_metric
 import nibabel as nib
@@ -59,12 +59,19 @@ def main(args):
     torch.multiprocessing.set_sharing_strategy('file_system')
 
     '''' Initialise dataloaders '''
-    val_loader = get_val_dataloader(data_dir=args.path_data,
-                                    num_workers=args.num_workers,
-                                    I=args.sequences,
-                                    test=args.test,
-                                    apply_mask=args.apply_mask,
-                                    cache_rate=0)
+    if not args.test:
+        data_loader = get_val_dataloader(data_dir=args.path_data,
+                                        num_workers=args.num_workers,
+                                        I=args.sequences,
+                                        test=args.test,
+                                        apply_mask=args.apply_mask,
+                                        cache_rate=0)
+    else:
+        data_loader = get_test_dataloader(data_dir=args.path_data,
+                                        num_workers=args.num_workers,
+                                        I=args.sequences,
+                                        apply_mask=args.apply_mask,
+                                        cache_rate=0)
 
     ''' Load trained model  '''
     in_channels = len(args.sequences)
@@ -90,7 +97,7 @@ def main(args):
         avg_dsc = 0
         avg_ndsc = 0
         n_subjects = 0
-        for count, batch_data in tqdm(enumerate(val_loader)):
+        for count, batch_data in tqdm(enumerate(data_loader)):
             inputs = batch_data["image"].to(device)
             foreground_mask = batch_data["brain_mask"].squeeze().cpu().numpy()
 
