@@ -4,10 +4,9 @@ import nibabel as nib
 import pandas as pd
 import numpy as np
 import nibabel as nib
-from scipy.ndimage import label
-from multiprocessing import Pool
 from postprocess import remove_small_lesions_from_instance_segmentation
 import warnings
+from conflunet.utils import find_confluent_lesions
 
 
 def dice_metric(ground_truth: np.ndarray, predictions: np.ndarray) -> float:
@@ -352,84 +351,6 @@ def DiC(pred: np.ndarray, ref: np.ndarray):
     pred_count = pred_lesion_count(pred)
     ref_count = ref_lesion_count(ref)
     return abs(pred_count - ref_count)
-
-
-def find_confluent_lesions(instance_segmentation: np.ndarray) -> list:
-    """
-    Find confluent lesions ids in the instance segmentation.
-    Args:
-        instance_segmentation: numpy.ndarray, instance segmentation with shape [H, W, D].
-    Returns:
-        list: List of ids of the confluent connected components.
-    """
-    # Remove background 0s
-    instances = np.unique(instance_segmentation[instance_segmentation != 0])
-    num_instances = len(instances)
-
-    binary_segmentation = np.copy(instance_segmentation)
-    binary_segmentation[binary_segmentation > 0] = 1
-
-    connected_components, num_connected_components = label(binary_segmentation)
-    connected_component_ids = np.unique(connected_components[connected_components != 0])  # Remove background 0s
-
-    if num_connected_components == num_instances:
-        # No confluent lesions found
-        return []
-
-    # Use multiprocessing to speed up the process
-    pool = Pool()
-    results = []
-
-    for instance_id in instances:
-        results.append(pool.apply_async(check_confluent, (instance_id, connected_component_ids,
-                                                          instance_segmentation, connected_components)))
-
-    pool.close()
-    pool.join()
-
-    # Retrieve the results from multiprocessing
-    confluent_connected_component_ids = []
-    for result in results:
-        confluent_connected_component_ids.append(result.get())
-
-    confluent_connected_component_ids = [instance_id for instance_id, cc_ids in confluent_connected_component_ids if
-                                         len(cc_ids) > 0]
-
-    return confluent_connected_component_ids
-
-
-def check_confluent(instance_id: int, connected_component_ids: list,
-                    instance_segmentation: np.ndarray, connected_components: np.ndarray) -> tuple:
-    """
-    Check if a lesion instance is part of a larger confluent lesion.
-    Args:
-        instance_id: int, id of the lesion instance.
-        connected_component_ids: list, list of connected components ids.
-        instance_segmentation: numpy.ndarray, instance segmentation with shape [H, W, D].
-        connected_components: numpy.ndarray, mask of connected components with shape [H, W, D]
-            where each id corresponds to a connected component.
-    Returns:
-        tuple: Tuple containing the instance id and a list of ids of confluent connected components.
-    """
-    confluent_connected_component_ids = []
-    for cc_id in connected_component_ids:
-        instance_indices = np.where(instance_segmentation == instance_id)
-        cc_indices = np.where(connected_components == cc_id)
-
-        instance_coords = set(zip(instance_indices[0], instance_indices[1], instance_indices[2]))
-        cc_coords = set(zip(cc_indices[0], cc_indices[1], cc_indices[2]))
-
-        # Check if the instance is completely in the connected component
-        if instance_coords.issubset(cc_coords):
-            confluent = True
-            if all([len(instance_indices[i]) == len(cc_indices[i]) for i in range(len(instance_indices))]):
-                if all(np.array_equal(instance_indices[i], cc_indices[i]) for i in range(len(instance_indices))):
-                    confluent = False
-
-            if confluent:
-                confluent_connected_component_ids.append(cc_id)
-
-    return instance_id, confluent_connected_component_ids
 
 
 def compute_metrics(args):

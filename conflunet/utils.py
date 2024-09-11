@@ -5,11 +5,41 @@ from copy import deepcopy
 from monai.data.meta_tensor import MetaTensor
 import torch.nn.functional as F
 import os
-import nibabel as nib
 from monai.transforms import MapTransform
 from monai.config import KeysCollection
-from postprocess import remove_small_lesions_from_instance_segmentation
+from conflunet.postprocess import remove_small_lesions_from_instance_segmentation
 from scipy.ndimage import center_of_mass
+from scipy.ndimage import label
+
+
+def find_confluent_instances(instance_segmentation: np.ndarray):
+    """
+    Find confluent instances in an instance segmentation map. 30x faster than the previous implementation.
+    :param instance_segmentation:
+    :return:
+    """
+    binary_segmentation = np.copy(instance_segmentation)
+    binary_segmentation[binary_segmentation > 0] = 1
+    binary_segmentation = binary_segmentation.astype(np.bool_)
+
+    connected_components, num_connected_components = label(binary_segmentation)
+
+    confluent_instances = []
+    for cc_id in range(1, num_connected_components + 1):
+        this_cc = connected_components == cc_id
+
+        this_cc = instance_segmentation[this_cc]
+        unique_values = np.unique(this_cc)
+        unique_values = list(unique_values[unique_values != 0])
+
+        if len(unique_values) > 1:
+            confluent_instances += unique_values
+
+    return sorted(list(set(confluent_instances)))
+
+
+def find_confluent_lesions(instance_segmentation):
+    return find_confluent_instances(instance_segmentation)
 
 
 class Printer(Callable):
@@ -297,5 +327,12 @@ class LesionOffsetTransformd(MapTransform):
                                     l_min=self.l_min)
 
 
-
-
+if __name__=='__main__':
+    import nibabel as nib
+    # file = '/home/mwynen/data/nnUNet/nnUNet_raw/Dataset321_WMLIS/labelsTr/sub-055_ses-01.nii.gz'
+    # instance_seg = nib.load(file).get_fdata()
+    #
+    # start = time.time()
+    # res3 = find_confluent_instances(instance_segmentation=instance_seg)
+    # end = time.time()
+    # print(f"\nTime taken with new way of doing: {end - start:.2f} seconds")

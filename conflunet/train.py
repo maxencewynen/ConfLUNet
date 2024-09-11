@@ -436,7 +436,7 @@ def main(args):
 
                     metric_PQ = np.mean(pqs)
                     metric_F1 = np.mean(fbetas)
-                    metric_ltpr = np.mean(ltprs)
+                    metric_recalls = np.mean(recalls)
                     metric_precision = np.mean(precisions)
                     metric_dic = np.mean(dics)
                     metric_dice_per_tp = np.mean(dice_scores_per_tp)
@@ -444,7 +444,7 @@ def main(args):
 
                     wandb.log({'Instance Segmentation Metrics/PQ (val)': metric_PQ,
                                'Instance Segmentation Metrics/F1 (val)': metric_F1,
-                               'Instance Segmentation Metrics/LTPR (val)': metric_ltpr,
+                               'Instance Segmentation Metrics/LTPR (val)': metric_recalls,
                                'Instance Segmentation Metrics/precision (val)': metric_precision,
                                'Instance Segmentation Metrics/DIC (val)': metric_dic,
                                'Instance Segmentation Metrics/Dice per TP (val)': metric_dice_per_tp,
