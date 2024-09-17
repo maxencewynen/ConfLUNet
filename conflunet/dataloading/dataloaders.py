@@ -83,23 +83,74 @@ def get_train_dataloader_from_dataset_id_and_fold(
 
     tr_keys, val_keys = _get_val_train_keys(preprocessed_dataset_folder, fold)
 
-    patch_size = (20,20,20)#configuration.patch_size
-    batch_size = 3#configuration.batch_size
+    patch_size = configuration.patch_size
+    batch_size = configuration.batch_size
 
     return get_train_dataloader(preprocessed_data_folder,
                                 case_identifiers=tr_keys, patch_size=patch_size, batch_size=batch_size,
                                 num_workers=num_workers, cache_rate=cache_rate, seed_val=seed_val)
 
 
+def get_val_dataloader_from_dataset_id_and_fold(
+        dataset_id: Union[int, str],
+        fold: int = None,
+        num_workers=0,
+        cache_rate=1.0,
+        seed_val=1):
+    dataset_name = convert_id_to_dataset_name(dataset_id)
+    plans_file = join(nnUNet_preprocessed, dataset_name, 'nnUNetPlans.json')
+    plans_manager = PlansManagerInstanceSeg(plans_file)
+    configuration = plans_manager.get_configuration('3d_fullres')
+    dataset_json = load_json(join(nnUNet_preprocessed, dataset_name, 'dataset.json'))
+    # TODO: handle case when dataset is not preprocessed
+    preprocessed_dataset_folder = join(nnUNet_preprocessed, dataset_name)
+    preprocessed_data_folder = join(preprocessed_dataset_folder, configuration.configuration['data_identifier'])
+
+    tr_keys, val_keys = _get_val_train_keys(preprocessed_dataset_folder, fold)
+
+    patch_size = configuration.patch_size
+    batch_size = configuration.batch_size
+
+    return get_val_dataloader(preprocessed_data_folder,
+                                case_identifiers=tr_keys, patch_size=patch_size, batch_size=batch_size,
+                                num_workers=num_workers, cache_rate=cache_rate, seed_val=seed_val)
+
+
 if __name__=="__main__":
+    import numpy as np
+    import nibabel as nib
+    import torch
+    import random
+    seed_val = 1
+
+    # seeding
+    torch.manual_seed(seed_val)
+    np.random.seed(seed_val)
+    random.seed(seed_val)
+
     dataset_id = 321
     fold = 0
     num_workers = 0
     cache_rate = 0
-    seed_val = 1
     train_loader = get_train_dataloader_from_dataset_id_and_fold(dataset_id, fold, num_workers, cache_rate, seed_val)
     print(train_loader)
-    for i, batch in enumerate(train_loader):
-        print(i, batch['img'].shape)
-        break
+    for epoch in range(2):
+        for i, batch in enumerate(train_loader):
+            print(i, batch['img'].shape)
+            # save
+            data = np.squeeze(batch['img'][0,0,:,:,:].numpy())
+            seg = np.squeeze(batch['seg'][0,0,:,:,:].numpy())
+            instance_seg = np.squeeze(batch['instance_seg'][0,0,:,:,:].numpy())
+            offsets_x = np.squeeze(batch['offsets'][0,0,:,:,:].numpy())
+            offsets_y = np.squeeze(batch['offsets'][0,1,:,:,:].numpy())
+            offsets_z = np.squeeze(batch['offsets'][0,2,:,:,:].numpy())
+
+            nib.save(nib.Nifti1Image(data, np.eye(4)), f"epoch_{epoch}_img_{i}.nii.gz")
+            nib.save(nib.Nifti1Image(seg, np.eye(4)), f"epoch_{epoch}_seg_{i}.nii.gz")
+            nib.save(nib.Nifti1Image(instance_seg, np.eye(4)), f"epoch_{epoch}_instance_seg_{i}.nii.gz")
+            nib.save(nib.Nifti1Image(offsets_x, np.eye(4)), f"epoch_{epoch}_offsets_x_{i}.nii.gz")
+            nib.save(nib.Nifti1Image(offsets_y, np.eye(4)), f"epoch_{epoch}_offsets_y_{i}.nii.gz")
+            nib.save(nib.Nifti1Image(offsets_z, np.eye(4)), f"epoch_{epoch}_offsets_z_{i}.nii.gz")
+
+            break
     print("Done!")
