@@ -284,24 +284,26 @@ def main(args):
                 loss = (seg_loss_weight * segmentation_loss) + (heatmap_loss_weight * mse_loss) + (
                         offsets_loss_weight * offset_loss)
 
-                epoch_loss += loss.item()
-                epoch_loss_ce += focal_loss.item()
-                epoch_loss_dice += dice_loss.item()
-                epoch_loss_seg += segmentation_loss.item()
-                epoch_loss_mse += mse_loss.item()
-                epoch_loss_offsets += offset_loss.item()
+            epoch_loss += loss.item()
+            epoch_loss_ce += focal_loss.item()
+            epoch_loss_dice += dice_loss.item()
+            epoch_loss_seg += segmentation_loss.item()
+            epoch_loss_mse += mse_loss.item()
+            epoch_loss_offsets += offset_loss.item()
+            print(f"DEBUG -- {loss=}")
+            print("DEBUG -- BACKWARD")
 
-                scaler.scale(loss).backward()
+            scaler.scale(loss).backward()
 
-                scaler.step(optimizer)
-                scaler.update()
+            scaler.step(optimizer)
+            scaler.update()
 
-                optimizer.zero_grad()
+            optimizer.zero_grad()
 
-                elapsed_time = time.time() - start_batch_time
-                print(
-                    f"Batch {batch_idx}/{len(train_loader)}, train_loss: {loss.item():.4f}" + \
-                    f"(elapsed time: {int(elapsed_time // 60)}min {int(elapsed_time % 60)}s)")
+            elapsed_time = time.time() - start_batch_time
+            print(
+                f"Batch {batch_idx + 1}/{len(train_loader)}, train_loss: {loss.item():.4f} " 
+                f"(elapsed time: {int(elapsed_time // 60)}min {int(elapsed_time % 60)}s)")
 
         elapsed_epoch_time = time.time() - start_epoch_time
         print(f"Epoch {epoch + 1} took {int(elapsed_epoch_time // 60)}min {int(elapsed_epoch_time % 60)}s")
@@ -316,6 +318,7 @@ def main(args):
         print(f"Epoch {epoch + 1} average loss: {epoch_loss:.4f}")
 
         current_lr = optimizer.param_groups[0]['lr']
+        print(f"DEBUG -- lr_scheduler.step()")
         lr_scheduler.step()
 
         wandb.log(
