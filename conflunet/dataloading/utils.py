@@ -25,9 +25,9 @@ from monai.transforms import (
     RandSpatialCropd,
     RandCropByPosNegLabeld,
 )
-from conflunet.dataloading.transforms.data_augmentations.scaleintensityfixedmean import RandScaleIntensityFixedMeand
-from conflunet.dataloading.transforms.data_augmentations.adjustcontrast import RandAdjustContrastd
-from conflunet.dataloading.transforms.data_augmentations.simulatelowresolution import RandSimulateLowResolutiond
+#from conflunet.dataloading.transforms.data_augmentations.scaleintensityfixedmean import RandScaleIntensityFixedMeand
+#from conflunet.dataloading.transforms.data_augmentations.adjustcontrast import RandAdjustContrastd
+#from conflunet.dataloading.transforms.data_augmentations.simulatelowresolution import RandSimulateLowResolutiond
 from conflunet.dataloading.transforms.loading import CustomLoadNPZInstanced, LesionOffsetTransformd
 from conflunet.dataloading.transforms.utils import *
 

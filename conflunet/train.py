@@ -127,7 +127,7 @@ def main(args):
     plans_file = pjoin(nnUNet_preprocessed, dataset_name, 'nnUNetPlans.json')
     plans_manager = PlansManagerInstanceSeg(plans_file)
     configuration = plans_manager.get_configuration('3d_fullres')
-    n_channels = len(plans_manager.foreground_intensity_properties_per_channel())
+    n_channels = len(plans_manager.foreground_intensity_properties_per_channel)
 
     save_dir = f'{args.save_path}/{args.name}'
     if not os.path.exists(save_dir):
