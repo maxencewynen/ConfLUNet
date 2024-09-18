@@ -26,6 +26,8 @@ from model import *
 import time
 from postprocess import postprocess
 from tqdm import tqdm
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
 
 parser = argparse.ArgumentParser(description='Get all command line arguments.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -113,6 +115,58 @@ def seed_everything(seed_val):
     torch.manual_seed(seed_val)
     torch.cuda.manual_seed_all(seed_val)
     set_determinism(seed=seed_val)
+
+
+def compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatmap, offsets):
+    # Initialize losses
+    loss_function_dice = DiceLoss(to_onehot_y=True,
+                                  softmax=True, sigmoid=False,
+                                  include_background=False)
+    loss_function_mse = nn.MSELoss()
+    if args.offsets_loss == 'l1':
+        offset_loss_fn = nn.L1Loss(reduction='none')
+    elif args.offsets_loss == 'sl1':
+        offset_loss_fn = nn.SmoothL1Loss(reduction='none')
+    else:
+        raise ValueError(f"Invalid loss function for offsets: {args.offsets_loss}")
+
+    # Initialize other variables and metrics
+    gamma_focal = 2.0
+    dice_weight = 0.5
+    focal_weight = 1.0
+    seg_loss_weight = args.seg_loss_weight
+    heatmap_loss_weight = args.heatmap_loss_weight
+    offsets_loss_weight = args.offsets_loss_weight
+
+
+    ### SEGMENTATION LOSS ###
+    # Dice loss
+    dice_loss = loss_function_dice(semantic_pred, labels)
+    # Focal loss
+    ce_loss = nn.CrossEntropyLoss(reduction='none')
+    ce = ce_loss(semantic_pred, torch.squeeze(labels, dim=1))
+    pt = torch.exp(-ce)
+    loss2 = (1 - pt) ** gamma_focal * ce
+    focal_loss = torch.mean(loss2)
+    segmentation_loss = dice_weight * dice_loss + focal_weight * focal_loss
+
+    ### COM PREDICTION LOSS ###
+    mse_loss = loss_function_mse(center_pred, center_heatmap)
+
+    ### COM REGRESSION LOSS ###
+    # Disregard voxels outside the GT segmentation
+    offset_loss_weights_matrix = labels.expand_as(offsets_pred)
+    offset_loss = offset_loss_fn(offsets_pred, offsets) * offset_loss_weights_matrix
+    if offset_loss_weights_matrix.sum() > 0:
+        offset_loss = offset_loss.sum() / offset_loss_weights_matrix.sum()
+    else:  # No foreground voxels
+        offset_loss = offset_loss.sum() * 0
+
+    ### TOTAL LOSS ###
+    loss = (seg_loss_weight * segmentation_loss) + (heatmap_loss_weight * mse_loss) + (
+            offsets_loss_weight * offset_loss)
+
+    return loss, dice_loss, focal_loss, segmentation_loss, mse_loss, offset_loss
 
 
 def main(args):
@@ -254,35 +308,11 @@ def main(args):
                 batch_data["center_heatmap"].to(device),
                 batch_data["offsets"].to(device))
 
-            with torch.cuda.amp.autocast():
-                semantic_pred, center_pred, offsets_pred = model(inputs)
+            #with torch.cuda.amp.autocast():
+            semantic_pred, center_pred, offsets_pred = model(inputs)
 
-                ### SEGMENTATION LOSS ###
-                # Dice loss
-                dice_loss = loss_function_dice(semantic_pred, labels)
-                # Focal loss
-                ce_loss = nn.CrossEntropyLoss(reduction='none')
-                ce = ce_loss(semantic_pred, torch.squeeze(labels, dim=1))
-                pt = torch.exp(-ce)
-                loss2 = (1 - pt) ** gamma_focal * ce
-                focal_loss = torch.mean(loss2)
-                segmentation_loss = dice_weight * dice_loss + focal_weight * focal_loss
-
-                ### COM PREDICTION LOSS ###
-                mse_loss = loss_function_mse(center_pred, center_heatmap)
-
-                ### COM REGRESSION LOSS ###
-                # Disregard voxels outside the GT segmentation
-                offset_loss_weights_matrix = labels.expand_as(offsets_pred)
-                offset_loss = offset_loss_fn(offsets_pred, offsets) * offset_loss_weights_matrix
-                if offset_loss_weights_matrix.sum() > 0:
-                    offset_loss = offset_loss.sum() / offset_loss_weights_matrix.sum()
-                else:  # No foreground voxels
-                    offset_loss = offset_loss.sum() * 0
-
-                ### TOTAL LOSS ###
-                loss = (seg_loss_weight * segmentation_loss) + (heatmap_loss_weight * mse_loss) + (
-                        offsets_loss_weight * offset_loss)
+            res = compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatmap, offsets)
+            loss, dice_loss, focal_loss, segmentation_loss, mse_loss, offset_loss = res
 
             epoch_loss += loss.item()
             epoch_loss_ce += focal_loss.item()
@@ -290,13 +320,14 @@ def main(args):
             epoch_loss_seg += segmentation_loss.item()
             epoch_loss_mse += mse_loss.item()
             epoch_loss_offsets += offset_loss.item()
-            print(f"DEBUG -- {loss=}")
-            print("DEBUG -- BACKWARD")
 
-            scaler.scale(loss).backward()
+            #scaler.scale(loss).backward()
 
-            scaler.step(optimizer)
-            scaler.update()
+            #scaler.step(optimizer)
+            #scaler.update()
+
+            loss.backward()
+            optimizer.step()
 
             optimizer.zero_grad()
 
@@ -315,10 +346,10 @@ def main(args):
         epoch_loss_mse /= len(train_loader)
         epoch_loss_offsets /= len(train_loader)
         epoch_loss_values.append(epoch_loss)
+
         print(f"Epoch {epoch + 1} average loss: {epoch_loss:.4f}")
 
         current_lr = optimizer.param_groups[0]['lr']
-        print(f"DEBUG -- lr_scheduler.step()")
         lr_scheduler.step()
 
         wandb.log(
@@ -343,47 +374,22 @@ def main(args):
                 for val_data in val_loader:
                     val_inputs, val_labels, val_heatmaps, val_offsets = (
                         val_data["img"].to(device),
-                        val_data["seg"].to(device),
+                        val_data["seg"].type(torch.LongTensor).to(device),
                         val_data["center_heatmap"].to(device),
                         val_data["offsets"].to(device),
                     )
+                    val_semantic_pred, val_center_pred, val_offsets_pred = model(val_inputs)
 
-                    semantic_pred, center_pred, offsets_pred = model(val_inputs)
-
-                    # Compute validation loss
-                    ### SEGMENTATION LOSS ###
-                    # Dice loss
-                    dice_loss = loss_function_dice(semantic_pred, val_labels)
-                    # Focal loss
-                    ce_loss = nn.CrossEntropyLoss(reduction='none')
-                    ce = ce_loss(semantic_pred, torch.squeeze(val_labels, dim=1))
-                    pt = torch.exp(-ce)
-                    loss2 = (1 - pt) ** gamma_focal * ce
-                    focal_loss = torch.mean(loss2)
-                    segmentation_loss = dice_weight * dice_loss + focal_weight * focal_loss
-
-                    ### COM PREDICTION LOSS ###
-                    mse_loss = loss_function_mse(center_pred, val_heatmaps)
-
-                    ### COM REGRESSION LOSS ###
-                    # Disregard voxels outside the GT segmentation
-                    offset_loss_weights_matrix = val_labels.expand_as(offsets_pred)
-                    offset_loss = offset_loss_fn(offsets_pred, val_offsets) * offset_loss_weights_matrix
-                    if offset_loss_weights_matrix.sum() > 0:
-                        offset_loss = offset_loss.sum() / offset_loss_weights_matrix.sum()
-                    else:  # No foreground voxels
-                        offset_loss = offset_loss.sum() * 0
-
-                    ### TOTAL LOSS ###
-                    val_loss = (seg_loss_weight * segmentation_loss) + (heatmap_loss_weight * mse_loss) + (
-                                offsets_loss_weight * offset_loss)
+                    res = compute_loss(val_semantic_pred, val_center_pred, val_offsets_pred, 
+                            val_labels, val_heatmaps, val_offsets)
+                    val_loss, val_dice_loss, val_focal_loss, val_segmentation_loss, val_mse_loss, val_offset_loss = res
 
                     avg_val_loss += val_loss.item()
-                    avg_val_dice_loss += dice_loss.item()
-                    avg_val_ce_loss += focal_loss.item()
-                    avg_val_seg_loss += segmentation_loss.item()
-                    avg_val_mse_loss += mse_loss.item()
-                    avg_val_offsets_loss += offset_loss.item()
+                    avg_val_dice_loss += val_dice_loss.item()
+                    avg_val_ce_loss += val_focal_loss.item()
+                    avg_val_seg_loss += val_segmentation_loss.item()
+                    avg_val_mse_loss += val_mse_loss.item()
+                    avg_val_offsets_loss += val_offset_loss.item()
 
                 avg_val_loss /= len(val_loader)
                 avg_val_dice_loss /= len(val_loader)
@@ -391,7 +397,7 @@ def main(args):
                 avg_val_seg_loss /= len(val_loader)
                 avg_val_mse_loss /= len(val_loader)
                 avg_val_offsets_loss /= len(val_loader)
-
+                
                 wandb.log(
                     {'Validation Loss/Total Loss': avg_val_loss, 'Validation Segmentation Loss/Dice Loss': avg_val_dice_loss,
                      'Validation Segmentation Loss/Focal Loss': avg_val_ce_loss,
