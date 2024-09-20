@@ -25,9 +25,9 @@ from monai.transforms import (
     RandSpatialCropd,
     RandCropByPosNegLabeld,
 )
-#from conflunet.dataloading.transforms.data_augmentations.scaleintensityfixedmean import RandScaleIntensityFixedMeand
-#from conflunet.dataloading.transforms.data_augmentations.adjustcontrast import RandAdjustContrastd
-#from conflunet.dataloading.transforms.data_augmentations.simulatelowresolution import RandSimulateLowResolutiond
+from conflunet.dataloading.transforms.data_augmentations.scaleintensityfixedmean import RandScaleIntensityFixedMeand
+from conflunet.dataloading.transforms.data_augmentations.adjustcontrast import RandAdjustContrastd
+from conflunet.dataloading.transforms.data_augmentations.simulatelowresolution import RandSimulateLowResolutiond
 from conflunet.dataloading.transforms.loading import CustomLoadNPZInstanced, LesionOffsetTransformd
 from conflunet.dataloading.transforms.utils import *
 
@@ -124,11 +124,11 @@ def get_train_transforms(seed: Union[int, None] = None,
                                bg_indices_key="seg_bg_indices",
                                spatial_size=patch_size, num_samples=1,
                                pos=1, neg=1),
-        # *get_nnunet_spatial_transforms(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask']),
+        *get_nnunet_spatial_transforms(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask']),
         # RandSpatialCropd(keys=['img', 'seg', 'instance_seg', 'brainmask'],
         #                  roi_size=patch_size,
         #                  random_center=False, random_size=False),
-        # *get_nnunet_augmentations(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask']),
+        *get_nnunet_augmentations(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask']),
         LesionOffsetTransformd(keys="instance_seg"),
         ToTensord(keys=['img', 'seg', 'offsets', 'center_heatmap', 'brainmask']),
         DeleteKeysd(keys=['properties']),

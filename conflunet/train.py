@@ -132,13 +132,12 @@ def compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatma
 
     # Initialize other variables and metrics
     gamma_focal = 2.0
-    dice_weight = 0.5
-    focal_weight = 1.0
+    dice_weight = 1#0.5
+    focal_weight = 1#1.0
     seg_loss_weight = args.seg_loss_weight
     heatmap_loss_weight = args.heatmap_loss_weight
     offsets_loss_weight = args.offsets_loss_weight
-
-
+    
     ### SEGMENTATION LOSS ###
     # Dice loss
     dice_loss = loss_function_dice(semantic_pred, labels)
@@ -167,6 +166,13 @@ def compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatma
             offsets_loss_weight * offset_loss)
 
     return loss, dice_loss, focal_loss, segmentation_loss, mse_loss, offset_loss
+
+
+def save_patch(data, name):
+    import nibabel as nib
+    import numpy as np
+
+    nib.save(nib.Nifti1Image(np.squeeze(data[0,0,:,:,:]), np.eye(4)), f'{name}.nii.gz')
 
 
 def main(args):
@@ -275,12 +281,6 @@ def main(args):
     # Initialize other variables and metrics
     epoch_num = args.n_epochs
     val_interval = args.val_interval
-    gamma_focal = 2.0
-    dice_weight = 0.5
-    focal_weight = 1.0
-    seg_loss_weight = args.seg_loss_weight
-    heatmap_loss_weight = args.heatmap_loss_weight
-    offsets_loss_weight = args.offsets_loss_weight
     best_val_loss = np.inf
     epoch_loss_values, metric_values_nDSC, metric_values_DSC = [], [], []
 
@@ -307,6 +307,11 @@ def main(args):
                 batch_data["seg"].type(torch.LongTensor).to(device),
                 batch_data["center_heatmap"].to(device),
                 batch_data["offsets"].to(device))
+            
+            #save_patch(inputs.cpu().numpy(), f'{epoch}_image')
+            #save_patch(labels.cpu().numpy().astype(np.int16), f'{epoch}_labels')
+            #save_patch(center_heatmap.cpu().numpy(), f'{epoch}_center_heatmap')
+            #save_patch(offsets.cpu().numpy(), f'{epoch}_offsets')
 
             #with torch.cuda.amp.autocast():
             semantic_pred, center_pred, offsets_pred = model(inputs)
@@ -321,13 +326,13 @@ def main(args):
             epoch_loss_mse += mse_loss.item()
             epoch_loss_offsets += offset_loss.item()
 
-            #scaler.scale(loss).backward()
+            scaler.scale(loss).backward()
 
-            #scaler.step(optimizer)
-            #scaler.update()
+            scaler.step(optimizer)
+            scaler.update()
 
-            loss.backward()
-            optimizer.step()
+            #loss.backward()
+            #optimizer.step()
 
             optimizer.zero_grad()
 
