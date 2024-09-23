@@ -156,6 +156,7 @@ def compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatma
     # Disregard voxels outside the GT segmentation
     offset_loss_weights_matrix = labels.expand_as(offsets_pred)
     offset_loss = offset_loss_fn(offsets_pred, offsets) * offset_loss_weights_matrix
+
     if offset_loss_weights_matrix.sum() > 0:
         offset_loss = offset_loss.sum() / offset_loss_weights_matrix.sum()
     else:  # No foreground voxels
@@ -171,8 +172,9 @@ def compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatma
 def save_patch(data, name):
     import nibabel as nib
     import numpy as np
-
-    nib.save(nib.Nifti1Image(np.squeeze(data[0,0,:,:,:]), np.eye(4)), f'{name}.nii.gz')
+    os.makedirs(f'.save_{args.name}', exist_ok=True)
+    nib.save(nib.Nifti1Image(np.squeeze(data[0,0,:,:,:]), np.eye(4)), 
+            pjoin(f'.save_{args.name}', f'{name}.nii.gz'))
 
 
 def main(args):
@@ -233,7 +235,7 @@ def main(args):
         else:
             print(f"Initializing new model with {n_channels} input channels")
             model = ConfLUNet(in_channels=n_channels, num_classes=2, separate_decoders=args.separate_decoders,
-                                      scale_offsets=args.offsets_scale).to(device)
+                                      scale_offsets=args.offsets_scale, track_running_stats = not args.debug).to(device)
 
         model.to(device)
         first_layer_params = model.a_block1.conv1.parameters()
@@ -258,26 +260,15 @@ def main(args):
 
     if args.debug:
         # modify train_loader so that it only returns the first batch of train_loader
-        train_loader = [next(iter(train_loader))]
-        val_loader = train_loader
+        val_loader = [next(iter(train_loader))]
+        train_loader = val_loader * len(train_loader)
     else:
         val_loader = get_val_dataloader_from_dataset_id_and_fold(args.dataset_id, args.fold,
                                                                  num_workers=args.num_workers,
                                                                  cache_rate=args.cache_rate,
                                                                  seed_val=args.seed)
 
-    # Initialize losses
-    loss_function_dice = DiceLoss(to_onehot_y=True,
-                                  softmax=True, sigmoid=False,
-                                  include_background=False)
-    loss_function_mse = nn.MSELoss()
-    if args.offsets_loss == 'l1':
-        offset_loss_fn = nn.L1Loss(reduction='none')
-    elif args.offsets_loss == 'sl1':
-        offset_loss_fn = nn.SmoothL1Loss(reduction='none')
-    else:
-        raise ValueError(f"Invalid loss function for offsets: {args.offsets_loss}")
-
+    
     # Initialize other variables and metrics
     epoch_num = args.n_epochs
     val_interval = args.val_interval
@@ -308,14 +299,20 @@ def main(args):
                 batch_data["center_heatmap"].to(device),
                 batch_data["offsets"].to(device))
             
-            #save_patch(inputs.cpu().numpy(), f'{epoch}_image')
-            #save_patch(labels.cpu().numpy().astype(np.int16), f'{epoch}_labels')
-            #save_patch(center_heatmap.cpu().numpy(), f'{epoch}_center_heatmap')
-            #save_patch(offsets.cpu().numpy(), f'{epoch}_offsets')
+            if args.debug and epoch == 0 and batch_idx == 0:
+                save_patch(inputs.cpu().numpy(), f'{epoch}_image')
+                save_patch(labels.cpu().numpy().astype(np.int16), f'{epoch}_labels')
+                save_patch(center_heatmap.cpu().numpy(), f'{epoch}_center_heatmap')
+                save_patch(offsets.cpu().numpy(), f'{epoch}_offsets')
 
             #with torch.cuda.amp.autocast():
             semantic_pred, center_pred, offsets_pred = model(inputs)
 
+            if args.debug and (epoch+1) % val_interval == 0 and batch_idx == len(train_loader) - 1:
+                save_patch(semantic_pred.detach().cpu().numpy().astype(np.int16), f'{epoch}_trainpred_labels')
+                save_patch(center_pred.detach().cpu().numpy(), f'{epoch}_trainpred_center_heatmap')
+                save_patch(offsets.detach().cpu().numpy(), f'{epoch}_trainpred_offsets')
+            
             res = compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatmap, offsets)
             loss, dice_loss, focal_loss, segmentation_loss, mse_loss, offset_loss = res
 
@@ -330,9 +327,6 @@ def main(args):
 
             scaler.step(optimizer)
             scaler.update()
-
-            #loss.backward()
-            #optimizer.step()
 
             optimizer.zero_grad()
 
@@ -376,7 +370,7 @@ def main(args):
                 avg_val_mse_loss = 0
                 avg_val_offsets_loss = 0
 
-                for val_data in val_loader:
+                for batch_idx, val_data in enumerate(val_loader):
                     val_inputs, val_labels, val_heatmaps, val_offsets = (
                         val_data["img"].to(device),
                         val_data["seg"].type(torch.LongTensor).to(device),
@@ -384,6 +378,13 @@ def main(args):
                         val_data["offsets"].to(device),
                     )
                     val_semantic_pred, val_center_pred, val_offsets_pred = model(val_inputs)
+                    
+                    if args.debug and batch_idx == 0:
+                        save_patch(val_inputs.cpu().numpy(), f'{epoch}_pred_image')
+                        save_patch(val_semantic_pred.cpu().numpy().astype(np.int16), f'{epoch}_pred_labels')
+                        save_patch(val_center_pred.cpu().numpy(), f'{epoch}_pred_center_heatmap')
+                        save_patch(val_offsets_pred.cpu().numpy(), f'{epoch}_pred_offsets')
+
 
                     res = compute_loss(val_semantic_pred, val_center_pred, val_offsets_pred, 
                             val_labels, val_heatmaps, val_offsets)
