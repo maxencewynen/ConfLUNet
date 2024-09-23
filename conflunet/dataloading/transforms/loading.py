@@ -23,27 +23,27 @@ class CustomLoadNPZInstanced(MapTransform):
             d['img'] = array['data'].astype(np.float32)
             #d['img'] = (array['seg'] > 0).astype(np.float32)
             if not self.test:
-                d['instance_seg'] = array['instance_seg'].astype(
-                    np.uint8)  # assuming no patient could have more than 255 lesions
-                d['seg'] = (array['seg'] > 0).astype(np.uint8)
+                # casting the segmentation in np.float32 otherwise there is a weird collate error with monai
+                d['instance_seg'] = array['instance_seg'].astype(np.float32)  
+                d['seg'] = (array['seg'] > 0).astype(np.float32)
 
                 # brainmask includes brain and lesions, area around the brain is considered background
                 # Not to confuse with other cases (like for RandCropByPosNegLabeld) where the foreground only includes the lesions
                 # Notice the >= instead of >, as nnUNet preprocessing makes the actual background to be =-1
-                d['brainmask'] = (array['seg'] >= 0).astype(np.uint8)
+                d['brainmask'] = (array['seg'] >= 0).astype(np.float32)
 
                 if 'center_heatmap' in d.keys():
                     d['center_heatmap'] = d['center_heatmap'].astype(np.float32)
 
                 if 'small_objects_and_confluent_instances_classes' in d.keys():
                     d['small_objects_and_confluent_instances_classes'] = \
-                        d['small_objects_and_confluent_instances_classes'].astype(np.uint8)
+                        d['small_objects_and_confluent_instances_classes'].astype(np.float32)
                 if 'small_object_classes' in d.keys():
-                    d['small_object_classes'] = d['small_object_classes'].astype(np.uint8)
+                    d['small_object_classes'] = d['small_object_classes'].astype(np.float32)
                 if 'confluent_instances' in d.keys():
-                    d['confluent_instances'] = d['confluent_instances'].astype(np.uint8)
+                    d['confluent_instances'] = d['confluent_instances'].astype(np.float32)
             elif 'brainmask' in d.keys():
-                d['brainmask'] = d['brainmask'].astype(np.uint8)
+                d['brainmask'] = d['brainmask'].astype(np.float32)
 
             properties_file = d['properties_file']
             if not pexists(properties_file):
