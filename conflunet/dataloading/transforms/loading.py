@@ -21,6 +21,7 @@ class CustomLoadNPZInstanced(MapTransform):
         for key in self.key_iterator(d):
             array = np.load(d[key], allow_pickle=False)
             d['img'] = array['data'].astype(np.float32)
+            #d['img'] = (array['seg'] > 0).astype(np.float32)
             if not self.test:
                 d['instance_seg'] = array['instance_seg'].astype(
                     np.uint8)  # assuming no patient could have more than 255 lesions

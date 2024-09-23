@@ -33,18 +33,22 @@ from conflunet.dataloading.transforms.utils import *
 
 
 def get_nnunet_spatial_transforms(image_key: str = "img",
-                                  seg_keys: tuple = ("seg", "instance_seg")):
+                                  seg_keys: tuple = ("seg", "instance_seg"),
+                                  spatial_size: tuple = ()):
     keys = [image_key] + seg_keys
     interpolation = ("bilinear",) + ("nearest",) * len(seg_keys)
-    transforms = []
-    transforms.append(
+    
+    transforms = [
         RandAffined(
-            keys=keys, mode=interpolation, prob=0.2,
+            keys=keys,
+            mode=interpolation,
+            prob=0.2, 
+            spatial_size=spatial_size,
             rotate_range=(0.52, ) * 3,
             scale_range=((-0.3, 0.4),) * 3,
-            padding_mode="zeros",
-        )
-    )
+            padding_mode='zeros'
+            ),
+        ]
     return transforms
 
 
@@ -126,11 +130,12 @@ def get_train_transforms(seed: Union[int, None] = None,
                                bg_indices_key="seg_bg_indices",
                                spatial_size=patch_size, num_samples=1,
                                pos=1, neg=1),
-        # *get_nnunet_spatial_transforms(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask']),
+        *get_nnunet_spatial_transforms(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask'],
+            spatial_size=patch_size),
         # RandSpatialCropd(keys=['img', 'seg', 'instance_seg', 'brainmask'],
         #                  roi_size=patch_size,
         #                  random_center=False, random_size=False),
-        # *get_nnunet_augmentations(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask']),
+        *get_nnunet_augmentations(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask']),
         LesionOffsetTransformd(keys="instance_seg"),
         ToTensord(keys=['img', 'seg', 'offsets', 'center_heatmap', 'brainmask']),
         DeleteKeysd(keys=['properties']),
