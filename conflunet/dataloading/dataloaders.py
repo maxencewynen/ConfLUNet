@@ -112,8 +112,8 @@ def get_val_dataloader_from_dataset_id_and_fold(
     batch_size = configuration.batch_size
 
     return get_val_dataloader(preprocessed_data_folder,
-                                case_identifiers=tr_keys, patch_size=patch_size, batch_size=batch_size,
-                                num_workers=num_workers, cache_rate=cache_rate, seed_val=seed_val)
+                              case_identifiers=val_keys, patch_size=patch_size, batch_size=batch_size,
+                              num_workers=num_workers, cache_rate=cache_rate, seed_val=seed_val)
 
 
 if __name__=="__main__":
