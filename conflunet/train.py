@@ -26,6 +26,7 @@ from model import *
 import time
 from postprocess import postprocess
 from tqdm import tqdm
+from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
 import warnings
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
 
@@ -50,7 +51,7 @@ parser.add_argument('--offsets_scale', type=float, default=1,
                     help='Specify the scale to multiply the predicted offsets with')
 parser.add_argument('--offsets_loss', type=str, default="l1",
                     help="Specify the loss used for the offsets. ('sl1' or 'l1')")
-parser.add_argument('--n_epochs', type=int, default=300, help='Specify the number of epochs to train for')
+parser.add_argument('--n_epochs', type=int, default=12500, help='Specify the number of epochs to train for')
 parser.add_argument('--path_model', type=str, default=None, help='Path to pretrained model')
 
 # initialisation
@@ -65,6 +66,7 @@ parser.add_argument('--save_path', type=str, default=os.environ["MODELS_ROOT_DIR
 # logging
 parser.add_argument('--val_interval', type=int, default=5, help='Validation every n-th epochs')
 
+parser.add_argument('--wandb_ignore', action="store_true", default=False, help='Whether to ignore this run in wandb')
 parser.add_argument('--wandb_project', type=str, default='ConfLUNet', help='wandb project name')
 parser.add_argument('--name', default="idiot without a name", help='Wandb run name')
 parser.add_argument('--force_restart', default=False, action='store_true',
@@ -132,8 +134,8 @@ def compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatma
 
     # Initialize other variables and metrics
     gamma_focal = 2.0
-    dice_weight = 1#0.5
-    focal_weight = 1#1.0
+    dice_weight = 1.0#0.5#1
+    focal_weight = 1.0#1
     seg_loss_weight = args.seg_loss_weight
     heatmap_loss_weight = args.heatmap_loss_weight
     offsets_loss_weight = args.offsets_loss_weight
@@ -211,19 +213,15 @@ def main(args):
         start_epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['state_dict'])
 
-        first_layer_params = model.a_block1.conv1.parameters()
-        rest_of_model_params = [p for p in model.parameters() if p not in first_layer_params]
-
-        optimizer = torch.optim.Adam([{'params': first_layer_params, 'lr': args.learning_rate},
-                                      {'params': rest_of_model_params, 'lr': flr}],
-                                     weight_decay=0.0005)  # momentum=0.9,
+        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
         optimizer.load_state_dict(checkpoint['optimizer'])
-
-        wandb_run_id = checkpoint['wandb_run_id']
-        wandb.init(project=args.wandb_project, mode="online", name=args.name, resume="must", id=wandb_run_id)
+        
+        if not args.wandb_ignore:
+            wandb_run_id = checkpoint['wandb_run_id']
+            wandb.init(project=args.wandb_project, mode="online", name=args.name, resume="must", id=wandb_run_id)
 
         # Initialize scheduler
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.n_epochs)
+        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
         lr_scheduler.load_state_dict(checkpoint["scheduler"])
 
         print(f"\nResuming training: (epoch {checkpoint['epoch']})\nLoaded checkpoint '{checkpoint_filename}'\n")
@@ -238,19 +236,18 @@ def main(args):
                                       scale_offsets=args.offsets_scale, track_running_stats = not args.debug).to(device)
 
         model.to(device)
-        first_layer_params = model.a_block1.conv1.parameters()
-        rest_of_model_params = [p for p in model.parameters() if p not in first_layer_params]
-        optimizer = torch.optim.Adam([{'params': first_layer_params, 'lr': args.learning_rate},
-                                      {'params': rest_of_model_params, 'lr': flr}],
-                                     weight_decay=0.0005)  # momentum=0.9,
+        
+        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
 
         start_epoch = 0
-        wandb.login()
-        wandb.init(project=args.wandb_project, mode="online", name=args.name)
-        wandb_run_id = wandb.run.id
+        if not args.wandb_ignore:
+            wandb.login()
+            wandb.init(project=args.wandb_project, mode="online", name=args.name)
+            wandb_run_id = wandb.run.id
 
         # Initialize scheduler
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.n_epochs)
+        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
+
 
     # Initialize dataloaders
     train_loader = get_train_dataloader_from_dataset_id_and_fold(args.dataset_id, args.fold,
@@ -351,12 +348,13 @@ def main(args):
         current_lr = optimizer.param_groups[0]['lr']
         lr_scheduler.step()
 
-        wandb.log(
-            {'Training Loss/Total Loss': epoch_loss, 'Training Segmentation Loss/Dice Loss': epoch_loss_dice,
-             'Training Segmentation Loss/Focal Loss': epoch_loss_ce,
-             'Training Loss/Segmentation Loss': epoch_loss_seg, 'Training Loss/Center Prediction Loss': epoch_loss_mse,
-             'Training Loss/Offsets Loss': epoch_loss_offsets, 'Learning rate': current_lr, },
-            step=epoch)
+        if not args.wandb_ignore:
+            wandb.log(
+                {'Training Loss/Total Loss': epoch_loss, 'Training Segmentation Loss/Dice Loss': epoch_loss_dice,
+                 'Training Segmentation Loss/Focal Loss': epoch_loss_ce,
+                 'Training Loss/Segmentation Loss': epoch_loss_seg, 'Training Loss/Center Prediction Loss': epoch_loss_mse,
+                 'Training Loss/Offsets Loss': epoch_loss_offsets, 'Learning rate': current_lr, },
+                step=epoch)
 
         ##### Validation #####
         if (epoch + 1) % val_interval == 0:
@@ -404,13 +402,14 @@ def main(args):
                 avg_val_mse_loss /= len(val_loader)
                 avg_val_offsets_loss /= len(val_loader)
                 
-                wandb.log(
-                    {'Validation Loss/Total Loss': avg_val_loss, 'Validation Segmentation Loss/Dice Loss': avg_val_dice_loss,
-                     'Validation Segmentation Loss/Focal Loss': avg_val_ce_loss,
-                     'Validation Loss/Segmentation Loss': avg_val_seg_loss, 'Validation Loss/Center Prediction Loss': avg_val_mse_loss,
-                     'Validation Loss/Offsets Loss': avg_val_offsets_loss},
-                    step=epoch
-                )
+                if not args.wandb_ignore:
+                    wandb.log(
+                        {'Validation Loss/Total Loss': avg_val_loss, 'Validation Segmentation Loss/Dice Loss': avg_val_dice_loss,
+                         'Validation Segmentation Loss/Focal Loss': avg_val_ce_loss,
+                         'Validation Loss/Segmentation Loss': avg_val_seg_loss, 'Validation Loss/Center Prediction Loss': avg_val_mse_loss,
+                         'Validation Loss/Offsets Loss': avg_val_offsets_loss},
+                        step=epoch
+                    )
 
                 if avg_val_loss < best_val_loss:
                     best_val_loss = avg_val_loss
@@ -420,16 +419,18 @@ def main(args):
                 val_elapsed_time = time.time() - start_validation_time
                 print(f"Validation took {int(val_elapsed_time // 60)}min {int(val_elapsed_time % 60)}s")
                 print(f"Validation Loss: {avg_val_loss:.4f}")
-
-        torch.save({
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'wandb_run_id': wandb_run_id,
-            'scheduler': lr_scheduler.state_dict()
-        }, checkpoint_filename)
+        
+        if not args.debug and not args.wandb_ignore:
+            torch.save({
+                'epoch': epoch + 1,
+                'state_dict': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'wandb_run_id': wandb_run_id,
+                'scheduler': lr_scheduler.state_dict()
+            }, checkpoint_filename)
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     main(args)
+
