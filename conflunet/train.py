@@ -233,9 +233,9 @@ def main(args):
             wandb.init(project=args.wandb_project, mode="online", name=args.name, resume="must", id=wandb_run_id)
 
         # Initialize scheduler
-        # lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
+        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
         # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.n_epochs)
-        lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=args.n_epochs)
+        # lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=args.n_epochs)
         lr_scheduler.load_state_dict(checkpoint["scheduler"])
 
         print(f"\nResuming training: (epoch {checkpoint['epoch']})\nLoaded checkpoint '{checkpoint_filename}'\n")
@@ -261,8 +261,8 @@ def main(args):
 
         model.to(device)
 
-        #optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
-        optimizer = torch.optim.Adam(model.parameters(), args.learning_rate, weight_decay=0.0005)
+        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
+        # optimizer = torch.optim.Adam(model.parameters(), args.learning_rate, weight_decay=0.0005)
 
         start_epoch = 0
         if not args.wandb_ignore:
@@ -271,9 +271,9 @@ def main(args):
             wandb_run_id = wandb.run.id
 
         # Initialize scheduler
-        #lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
-        #lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.n_epochs)
-        lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=args.n_epochs)
+        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
+        # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.n_epochs)
+        # lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=args.n_epochs)
 
 
     # Initialize dataloaders
