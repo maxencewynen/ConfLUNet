@@ -280,6 +280,7 @@ def main(args):
     val_interval = args.val_interval
     best_val_loss = np.inf
     epoch_loss_values, metric_values_nDSC, metric_values_DSC = [], [], []
+    best_dsc = -np.inf
     best_ndsc = -np.inf
 
     # Initialize scaler
@@ -469,9 +470,16 @@ def main(args):
                     save_path = os.path.join(save_dir, f"{args.name}_seed{args.seed}_best_ndsc.pth")
                     torch.save(model.state_dict(), save_path)
 
+                if total_dice > best_dsc:
+                    best_dsc = total_dice
+                    save_path = os.path.join(save_dir, f"{args.name}_seed{args.seed}_best_dsc.pth")
+                    torch.save(model.state_dict(), save_path)
+
                 val_elapsed_time = time.time() - start_validation_time
                 print(f"Validation took {int(val_elapsed_time // 60)}min {int(val_elapsed_time % 60)}s")
                 print(f"Validation Loss: {avg_val_loss:.4f}")
+                print(f"Validation DSC: {total_dice:.4f} (best DSC: {best_dsc:.4f})")
+                print(f"Validation nDSC: {total_ndsc:.4f} (best nDSC: {best_ndsc:.4f})")
 
         if not args.debug and not args.wandb_ignore:
             torch.save({
