@@ -51,7 +51,7 @@ parser.add_argument('--offsets_scale', type=float, default=1,
                     help='Specify the scale to multiply the predicted offsets with')
 parser.add_argument('--offsets_loss', type=str, default="l1",
                     help="Specify the loss used for the offsets. ('sl1' or 'l1')")
-parser.add_argument('--n_epochs', type=int, default=12500, help='Specify the number of epochs to train for')
+parser.add_argument('--n_epochs', type=int, default=300, help='Specify the number of epochs to train for')
 parser.add_argument('--path_model', type=str, default=None, help='Path to pretrained model')
 
 # initialisation
@@ -74,6 +74,8 @@ parser.add_argument('--force_restart', default=False, action='store_true',
 
 parser.add_argument('--debug', default=False, action='store_true',
                     help="Debug mode: use a single batch for training and validation")
+parser.add_argument('--save_predictions', default=False, action='store_true',
+                    help="Debug mode: save predictions of the first batch for each validation step")
 
 VAL_AMP = True
 roi_size = (96, 96, 96)
@@ -134,7 +136,7 @@ def compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatma
 
     # Initialize other variables and metrics
     gamma_focal = 2.0
-    dice_weight = 1.0#0.5#1
+    dice_weight = 0.5#1
     focal_weight = 1.0#1
     seg_loss_weight = args.seg_loss_weight
     heatmap_loss_weight = args.heatmap_loss_weight
@@ -175,7 +177,8 @@ def save_patch(data, name):
     import nibabel as nib
     import numpy as np
     os.makedirs(f'.save_{args.name}', exist_ok=True)
-    nib.save(nib.Nifti1Image(np.squeeze(data[0,0,:,:,:]), np.eye(4)), 
+    tobesaved = data if len(data.shape) == 3 else np.squeeze(data[0,0,:,:,:])
+    nib.save(nib.Nifti1Image(tobesaved, np.eye(4)), 
             pjoin(f'.save_{args.name}', f'{name}.nii.gz'))
 
 
@@ -213,7 +216,8 @@ def main(args):
         start_epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['state_dict'])
 
-        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
+        #optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
+        optimizer = torch.optim.Adam(model.parameters(), args.learning_rate, weight_decay=0.0005) 
         optimizer.load_state_dict(checkpoint['optimizer'])
         
         if not args.wandb_ignore:
@@ -221,7 +225,9 @@ def main(args):
             wandb.init(project=args.wandb_project, mode="online", name=args.name, resume="must", id=wandb_run_id)
 
         # Initialize scheduler
-        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
+        # lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
+        #lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.n_epochs)
+        lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=args.n_epochs)
         lr_scheduler.load_state_dict(checkpoint["scheduler"])
 
         print(f"\nResuming training: (epoch {checkpoint['epoch']})\nLoaded checkpoint '{checkpoint_filename}'\n")
@@ -237,7 +243,8 @@ def main(args):
 
         model.to(device)
         
-        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
+        #optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
+        optimizer = torch.optim.Adam(model.parameters(), args.learning_rate, weight_decay=0.0005) 
 
         start_epoch = 0
         if not args.wandb_ignore:
@@ -246,7 +253,9 @@ def main(args):
             wandb_run_id = wandb.run.id
 
         # Initialize scheduler
-        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
+        #lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
+        #lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.n_epochs)
+        lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=args.n_epochs)
 
 
     # Initialize dataloaders
@@ -271,6 +280,7 @@ def main(args):
     val_interval = args.val_interval
     best_val_loss = np.inf
     epoch_loss_values, metric_values_nDSC, metric_values_DSC = [], [], []
+    best_ndsc = -np.inf
 
     # Initialize scaler
     scaler = torch.cuda.amp.GradScaler()
@@ -296,7 +306,7 @@ def main(args):
                 batch_data["center_heatmap"].to(device),
                 batch_data["offsets"].to(device))
             
-            if args.debug and epoch == 0 and batch_idx == 0:
+            if (args.debug or args.save_predictions) and epoch == 0 and batch_idx == 0:
                 save_patch(inputs.cpu().numpy(), f'{epoch}_image')
                 save_patch(labels.cpu().numpy().astype(np.int16), f'{epoch}_labels')
                 save_patch(center_heatmap.cpu().numpy(), f'{epoch}_center_heatmap')
@@ -367,6 +377,9 @@ def main(args):
                 avg_val_seg_loss = 0
                 avg_val_mse_loss = 0
                 avg_val_offsets_loss = 0
+                total_dice = 0
+                total_ndsc = 0
+                batch_size = 0
 
                 for batch_idx, val_data in enumerate(val_loader):
                     val_inputs, val_labels, val_heatmaps, val_offsets = (
@@ -377,12 +390,30 @@ def main(args):
                     )
                     val_semantic_pred, val_center_pred, val_offsets_pred = model(val_inputs)
                     
-                    if args.debug and batch_idx == 0:
+                    act = torch.nn.Softmax(dim=1)
+                    val_seg_pred = act(val_semantic_pred.clone().detach()).cpu().numpy()
+                    val_seg_pred = val_seg_pred[:, 1, :, :, :] 
+                    torch.cuda.empty_cache()
+                    binary_seg = np.copy(val_seg_pred)
+                    binary_seg[binary_seg >= 0.5] = 1
+                    binary_seg[binary_seg < 0.5] = 0
+                    if len(binary_seg.shape) > 3:
+                       binary_seg = np.squeeze(binary_seg)
+                    
+                    if (args.debug or args.save_predictions) and batch_idx == 0: 
                         save_patch(val_inputs.cpu().numpy(), f'{epoch}_pred_image')
-                        save_patch(val_semantic_pred.cpu().numpy().astype(np.int16), f'{epoch}_pred_labels')
+                        del val_inputs
+                        #save_patch(val_semantic_pred.cpu().numpy().astype(np.int16), f'{epoch}_pred_labels')
                         save_patch(val_center_pred.cpu().numpy(), f'{epoch}_pred_center_heatmap')
                         save_patch(val_offsets_pred.cpu().numpy(), f'{epoch}_pred_offsets')
-
+					
+                        save_patch(val_seg_pred[0], f"{epoch}_pred_segmentation_proba")
+                        save_patch(binary_seg[0], f"{epoch}_pred_segmentation_binary")
+                    
+                    batch_size = val_labels.shape[0]
+                    for mbidx in range(batch_size):
+                        total_dice += dice_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
+                        total_ndsc += dice_norm_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
 
                     res = compute_loss(val_semantic_pred, val_center_pred, val_offsets_pred, 
                             val_labels, val_heatmaps, val_offsets)
@@ -401,19 +432,28 @@ def main(args):
                 avg_val_seg_loss /= len(val_loader)
                 avg_val_mse_loss /= len(val_loader)
                 avg_val_offsets_loss /= len(val_loader)
+                total_dice /= (len(val_loader) * batch_size)
+                total_ndsc /= (len(val_loader) * batch_size)
                 
                 if not args.wandb_ignore:
                     wandb.log(
                         {'Validation Loss/Total Loss': avg_val_loss, 'Validation Segmentation Loss/Dice Loss': avg_val_dice_loss,
                          'Validation Segmentation Loss/Focal Loss': avg_val_ce_loss,
                          'Validation Loss/Segmentation Loss': avg_val_seg_loss, 'Validation Loss/Center Prediction Loss': avg_val_mse_loss,
-                         'Validation Loss/Offsets Loss': avg_val_offsets_loss},
+                         'Validation Loss/Offsets Loss': avg_val_offsets_loss,
+                         'Validation Metrics/Dice Score': total_dice,
+                         'Validation Metrics/Normalized Dice': total_ndsc},
                         step=epoch
                     )
 
                 if avg_val_loss < best_val_loss:
                     best_val_loss = avg_val_loss
-                    save_path = os.path.join(save_dir, f"{args.name}_seed{args.seed}_best.pth")
+                    save_path = os.path.join(save_dir, f"{args.name}_seed{args.seed}_best_loss.pth")
+                    torch.save(model.state_dict(), save_path)
+
+                if total_ndsc > best_ndsc:
+                    best_ndsc = total_ndsc
+                    save_path = os.path.join(save_dir, f"{args.name}_seed{args.seed}_best_ndsc.pth")
                     torch.save(model.state_dict(), save_path)
 
                 val_elapsed_time = time.time() - start_validation_time
