@@ -18,7 +18,7 @@ class Conv3DBlock(nn.Module):
         Tensor: Output tensor after convolution.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, bottleneck: bool = False, 
+    def __init__(self, in_channels: int, out_channels: int, bottleneck: bool = False,
             track_running_stats: bool = TRS) -> None:
         super(Conv3DBlock, self).__init__()
         self.conv1 = nn.Conv3d(in_channels=in_channels, out_channels=out_channels // 2, kernel_size=(3, 3, 3), padding=1)

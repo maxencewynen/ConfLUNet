@@ -14,6 +14,8 @@ import numpy as np
 import random
 
 from conflunet.preprocessing.preprocess import PlansManagerInstanceSeg
+from conflunet.architecture.conflunet import *
+from conflunet.architecture.nnconflunet import *
 from metrics import *
 from conflunet.dataloading.dataloaders import (
     get_train_dataloader_from_dataset_id_and_fold,
@@ -22,7 +24,6 @@ from conflunet.dataloading.dataloaders import (
 import wandb
 from os.path import join as pjoin
 from metrics import *
-from model import *
 import time
 from postprocess import postprocess
 from tqdm import tqdm
@@ -196,27 +197,34 @@ def main(args):
     configuration = plans_manager.get_configuration('3d_fullres')
     n_channels = len(plans_manager.foreground_intensity_properties_per_channel)
 
+    if args.debug:
+        args.name = f"DEBUG_{args.name}"
+
     save_dir = f'{args.save_path}/{args.name}'
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    if args.debug:
-        args.name = f"DEBUG_{args.name}"
-
-    flr = args.learning_rate if args.frozen_learning_rate < 0 else args.frozen_learning_rate
-
     # Initialize model
     checkpoint_filename = os.path.join(save_dir, f"{args.name}_seed{args.seed}_final.pth")
     if os.path.exists(checkpoint_filename) and not args.force_restart:
-        model = ConfLUNet(in_channels=n_channels, num_classes=2, separate_decoders=args.separate_decoders,
-                          scale_offsets=args.offsets_scale).to(device)
+        # model = ConfLUNet(in_channels=n_channels, num_classes=2, separate_decoders=args.separate_decoders,
+        #                   scale_offsets=args.offsets_scale).to(device)
+        model = get_network_from_plans(
+            "conflunet.architecture.nnconflunet.nnConfLUNet",#configuration.network_arch_class_name,
+            configuration.network_arch_init_kwargs,
+            configuration.network_arch_init_kwargs_req_import,
+            n_channels,
+            output_channels=2,
+            allow_init=True,
+            deep_supervision=False
+        ).to(device)
 
         checkpoint = torch.load(checkpoint_filename)
 
         start_epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['state_dict'])
 
-        #optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
+        # optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
         optimizer = torch.optim.Adam(model.parameters(), args.learning_rate, weight_decay=0.0005)
         optimizer.load_state_dict(checkpoint['optimizer'])
 
@@ -226,7 +234,7 @@ def main(args):
 
         # Initialize scheduler
         # lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
-        #lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.n_epochs)
+        # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.n_epochs)
         lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=args.n_epochs)
         lr_scheduler.load_state_dict(checkpoint["scheduler"])
 
@@ -235,11 +243,21 @@ def main(args):
     else:
         if args.path_model is not None:
             print(f"Retrieving pretrained model from {args.path_model}")
-            model = get_pretrained_model(args.path_model, n_channels)
+            # model = get_pretrained_model(args.path_model, n_channels)
+            raise NotImplementedError
         else:
             print(f"Initializing new model with {n_channels} input channels")
-            model = ConfLUNet(in_channels=n_channels, num_classes=2, separate_decoders=args.separate_decoders,
-                                      scale_offsets=args.offsets_scale, track_running_stats = not args.debug).to(device)
+            # model = ConfLUNet(in_channels=n_channels, num_classes=2, separate_decoders=args.separate_decoders,
+            #                           scale_offsets=args.offsets_scale, track_running_stats = not args.debug).to(device)
+            model = get_network_from_plans(
+                "conflunet.architecture.nnconflunet.nnConfLUNet",  # configuration.network_arch_class_name,
+                configuration.network_arch_init_kwargs,
+                configuration.network_arch_init_kwargs_req_import,
+                n_channels,
+                output_channels=2,
+                allow_init=True,
+                deep_supervision=False
+            )
 
         model.to(device)
 
@@ -273,7 +291,6 @@ def main(args):
                                                                  num_workers=args.num_workers,
                                                                  cache_rate=args.cache_rate,
                                                                  seed_val=args.seed)
-
 
     # Initialize other variables and metrics
     epoch_num = args.n_epochs
@@ -403,18 +420,6 @@ def main(args):
 
                     if (args.debug or args.save_predictions) and batch_idx == 0:
                         save_patch(val_inputs.cpu().numpy(), f'{epoch}_pred_image')
-                        del val_inputs
-                        #save_patch(val_semantic_pred.cpu().numpy().astype(np.int16), f'{epoch}_pred_labels')
-                        save_patch(val_center_pred.cpu().numpy(), f'{epoch}_pred_center_heatmap')
-                        save_patch(val_offsets_pred.cpu().numpy(), f'{epoch}_pred_offsets')
-
-                        save_patch(val_seg_pred[0], f"{epoch}_pred_segmentation_proba")
-                        save_patch(binary_seg[0], f"{epoch}_pred_segmentation_binary")
-
-                    batch_size = val_labels.shape[0]
-                    for mbidx in range(batch_size):
-                        total_dice += dice_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
-                        total_ndsc += dice_norm_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
                         save_patch(val_center_pred.cpu().numpy(), f'{epoch}_pred_center_heatmap')
                         save_patch(val_offsets_pred.cpu().numpy(), f'{epoch}_pred_offsets')
                         save_patch(val_seg_pred[0], f"{epoch}_pred_segmentation_proba")
@@ -424,10 +429,6 @@ def main(args):
                     for mbidx in range(batch_size):
                         total_dice += dice_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
                         total_ndsc += dice_norm_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
-
-                    res = compute_loss(val_semantic_pred, val_center_pred, val_offsets_pred,
-                            val_labels, val_heatmaps, val_offsets)
-                    val_loss, val_dice_loss, val_focal_loss, val_segmentation_loss, val_mse_loss, val_offset_loss = res
 
                     res = compute_loss(val_semantic_pred, val_center_pred, val_offsets_pred,
                             val_labels, val_heatmaps, val_offsets)
