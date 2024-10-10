@@ -411,17 +411,17 @@ def main(args):
 
                 if avg_val_loss < best_val_loss:
                     best_val_loss = avg_val_loss
-                    save_path = os.path.join(save_dir, f"seed{args.seed}_best_loss.pth")
+                    save_path = os.path.join(save_dir, f"best_loss.pth")
                     torch.save(model.state_dict(), save_path)
 
                 if total_ndsc > best_ndsc:
                     best_ndsc = total_ndsc
-                    save_path = os.path.join(save_dir, f"seed{args.seed}_best_ndsc.pth")
+                    save_path = os.path.join(save_dir, f"best_ndsc.pth")
                     torch.save(model.state_dict(), save_path)
 
                 if total_dice > best_dsc:
                     best_dsc = total_dice
-                    save_path = os.path.join(save_dir, f"seed{args.seed}_best_dsc.pth")
+                    save_path = os.path.join(save_dir, f"best_dsc.pth")
                     torch.save(model.state_dict(), save_path)
 
                 val_elapsed_time = time.time() - start_validation_time

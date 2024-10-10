@@ -88,21 +88,11 @@ def compute_loss(semantic_pred, labels):
     loss_function_dice = DiceLoss(to_onehot_y=True,
                                   softmax=True, sigmoid=False,
                                   include_background=False)
-    loss_function_mse = nn.MSELoss()
-    if args.offsets_loss == 'l1':
-        offset_loss_fn = nn.L1Loss(reduction='none')
-    elif args.offsets_loss == 'sl1':
-        offset_loss_fn = nn.SmoothL1Loss(reduction='none')
-    else:
-        raise ValueError(f"Invalid loss function for offsets: {args.offsets_loss}")
 
     # Initialize other variables and metrics
     gamma_focal = 2.0
     dice_weight = 0.5#1
     focal_weight = 1.0#1
-    seg_loss_weight = args.seg_loss_weight
-    heatmap_loss_weight = args.heatmap_loss_weight
-    offsets_loss_weight = args.offsets_loss_weight
 
     ### SEGMENTATION LOSS ###
     # Dice loss
@@ -361,17 +351,17 @@ def main(args):
 
                 if avg_val_loss < best_val_loss:
                     best_val_loss = avg_val_loss
-                    save_path = os.path.join(save_dir, f"seed{args.seed}_best_loss.pth")
+                    save_path = os.path.join(save_dir, f"best_loss.pth")
                     torch.save(model.state_dict(), save_path)
 
                 if total_ndsc > best_ndsc:
                     best_ndsc = total_ndsc
-                    save_path = os.path.join(save_dir, f"seed{args.seed}_best_ndsc.pth")
+                    save_path = os.path.join(save_dir, f"best_ndsc.pth")
                     torch.save(model.state_dict(), save_path)
 
                 if total_dice > best_dsc:
                     best_dsc = total_dice
-                    save_path = os.path.join(save_dir, f"seed{args.seed}_best_dsc.pth")
+                    save_path = os.path.join(save_dir, f"best_dsc.pth")
                     torch.save(model.state_dict(), save_path)
 
                 val_elapsed_time = time.time() - start_validation_time
