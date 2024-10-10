@@ -131,7 +131,7 @@ def get_model_optimizer_and_scheduler(args, configuration, n_channels, device, c
     # Initialize model
     if os.path.exists(checkpoint_filename) and not args.force_restart:
         model = get_network_from_plans(
-            "conflunet.architecture.nnconflunet.nnConfLUNet",#configuration.network_arch_class_name,
+            configuration.network_arch_class_name,
             configuration.network_arch_init_kwargs,
             configuration.network_arch_init_kwargs_req_import,
             n_channels,
@@ -161,7 +161,7 @@ def get_model_optimizer_and_scheduler(args, configuration, n_channels, device, c
     else:
         print(f"Initializing new model with {n_channels} input channels")
         model = get_network_from_plans(
-            "conflunet.architecture.nnconflunet.nnConfLUNet",  # configuration.network_arch_class_name,
+            configuration.network_arch_class_name,
             configuration.network_arch_init_kwargs,
             configuration.network_arch_init_kwargs_req_import,
             n_channels,
