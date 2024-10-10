@@ -189,6 +189,7 @@ def main(args):
     configuration = plans_manager.get_configuration('3d_fullres')
     n_channels = len(plans_manager.foreground_intensity_properties_per_channel)
 
+    args.name = f"SEMANTIC_{args.name}"
     if args.debug:
         args.name = f"DEBUG_{args.name}"
 
