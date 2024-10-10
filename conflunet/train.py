@@ -1,14 +1,10 @@
 import argparse
 import os
 import torch
-from nnunetv2.paths import nnUNet_preprocessed
+from nnunetv2.paths import nnUNet_preprocessed, nnUNet_results
 from nnunetv2.utilities.dataset_name_id_conversion import convert_id_to_dataset_name
 from torch import nn
-from monai.data import decollate_batch
-from monai.transforms import Compose, AsDiscrete
-from monai.inferers import sliding_window_inference
 from monai.losses import DiceLoss
-from monai.metrics import DiceMetric
 from monai.utils import set_determinism
 import numpy as np
 import random
@@ -16,7 +12,6 @@ import random
 from conflunet.preprocessing.preprocess import PlansManagerInstanceSeg
 from conflunet.architecture.conflunet import *
 from conflunet.architecture.nnconflunet import *
-from metrics import *
 from conflunet.dataloading.dataloaders import (
     get_train_dataloader_from_dataset_id_and_fold,
     get_val_dataloader_from_dataset_id_and_fold
@@ -25,8 +20,6 @@ import wandb
 from os.path import join as pjoin
 from metrics import *
 import time
-from postprocess import postprocess
-from tqdm import tqdm
 from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
 import warnings
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
@@ -38,31 +31,19 @@ parser = argparse.ArgumentParser(description='Get all command line arguments.',
 parser.add_argument('--dataset_id', type=int, default=321, help='Specify the dataset id')
 parser.add_argument('--fold', type=int, default=0, help='Specify the fold')
 parser.add_argument('--num_workers', type=int, default=12, help='Number of workers')
-parser.add_argument('--cache_rate', default=1.0, type=float)
+parser.add_argument('--cache_rate', default=0, type=float)
 
 # trainining
-parser.add_argument('--separate_decoders', action="store_true", default=False,
-                    help="Whether to use separate decoders for the segmentation and center prediction tasks")
-parser.add_argument('--frozen_learning_rate', type=float, default=-1, help='Specify the initial learning rate')
-parser.add_argument('--learning_rate', type=float, default=1e-5, help='Specify the initial learning rate')
+parser.add_argument('--learning_rate', type=float, default=1e-2, help='Specify the initial learning rate')
 parser.add_argument('--seg_loss_weight', type=float, default=1, help='Specify the weight of the segmentation loss')
-parser.add_argument('--heatmap_loss_weight', type=float, default=100, help='Specify the weight of the heatmap loss')
-parser.add_argument('--offsets_loss_weight', type=float, default=10, help='Specify the weight of the offsets loss')
-parser.add_argument('--offsets_scale', type=float, default=1,
-                    help='Specify the scale to multiply the predicted offsets with')
+parser.add_argument('--heatmap_loss_weight', type=float, default=1, help='Specify the weight of the heatmap loss')
+parser.add_argument('--offsets_loss_weight', type=float, default=1, help='Specify the weight of the offsets loss')
 parser.add_argument('--offsets_loss', type=str, default="l1",
                     help="Specify the loss used for the offsets. ('sl1' or 'l1')")
-parser.add_argument('--n_epochs', type=int, default=300, help='Specify the number of epochs to train for')
-parser.add_argument('--path_model', type=str, default=None, help='Path to pretrained model')
+parser.add_argument('--n_epochs', type=int, default=1500, help='Specify the number of epochs to train for')
 
 # initialisation
 parser.add_argument('--seed', type=int, default=1, help='Specify the global random seed')
-
-parser.add_argument('--apply_mask', type=str, default=None,
-                    help='The name of the folder containing the masks you want to the images to be applied to.')
-
-parser.add_argument('--save_path', type=str, default=os.environ["MODELS_ROOT_DIR"],
-                    help='Specify the path to the save directory')
 
 # logging
 parser.add_argument('--val_interval', type=int, default=5, help='Validation every n-th epochs')
@@ -73,17 +54,14 @@ parser.add_argument('--name', default="idiot without a name", help='Wandb run na
 parser.add_argument('--force_restart', default=False, action='store_true',
                     help="force the training to restart at 0 even if a checkpoint was found")
 
+# debugging
 parser.add_argument('--debug', default=False, action='store_true',
                     help="Debug mode: use a single batch for training and validation")
 parser.add_argument('--save_predictions', default=False, action='store_true',
                     help="Debug mode: save predictions of the first batch for each validation step")
 
-VAL_AMP = True
-roi_size = (96, 96, 96)
-
 
 def load_checkpoint(model, optimizer, filename):
-    start_epoch = 0
     print(f"=> Loading checkpoint '{filename}'")
     checkpoint = torch.load(filename)
     start_epoch = checkpoint['epoch']
@@ -95,23 +73,11 @@ def load_checkpoint(model, optimizer, filename):
     return model, optimizer, start_epoch, wandb_run_id
 
 
-def check_paths(args):
-    from os.path import exists as pexists
-    assert pexists(args.save_path), f"Directory not found {args.save_path}"
-    if args.path_model:
-        assert pexists(args.path_model), f"Warning: File not found {args.path_model}"
-
-
 def get_default_device():
     """ Set device """
     if torch.cuda.is_available():
         return torch.device('cuda')
     raise Exception("No GPU device was found: I cannot train without GPU.")
-
-
-post_trans = Compose(
-    [AsDiscrete(argmax=True, to_onehot=2)]
-)
 
 
 def seed_everything(seed_val):
@@ -174,41 +140,18 @@ def compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatma
     return loss, dice_loss, focal_loss, segmentation_loss, mse_loss, offset_loss
 
 
-def save_patch(data, name):
+def save_patch(data, name, save_dir):
     import nibabel as nib
     import numpy as np
-    os.makedirs(f'.save_{args.name}', exist_ok=True)
     tobesaved = data if len(data.shape) == 3 else np.squeeze(data[0,0,:,:,:])
     nib.save(nib.Nifti1Image(tobesaved, np.eye(4)),
-            pjoin(f'.save_{args.name}', f'{name}.nii.gz'))
+            pjoin(save_dir, f'{name}.nii.gz'))
 
 
-def main(args):
-    check_paths(args)
-    seed_val = args.seed
-    seed_everything(seed_val)
-
-    device = get_default_device()
-    torch.multiprocessing.set_sharing_strategy('file_system')
-
-    dataset_name = convert_id_to_dataset_name(args.dataset_id)
-    plans_file = pjoin(nnUNet_preprocessed, dataset_name, 'nnUNetPlans.json')
-    plans_manager = PlansManagerInstanceSeg(plans_file)
-    configuration = plans_manager.get_configuration('3d_fullres')
-    n_channels = len(plans_manager.foreground_intensity_properties_per_channel)
-
-    if args.debug:
-        args.name = f"DEBUG_{args.name}"
-
-    save_dir = f'{args.save_path}/{args.name}'
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
+def get_model_optimizer_and_scheduler(args, configuration, n_channels, device, checkpoint_filename):
+    wandb_run_id = None
     # Initialize model
-    checkpoint_filename = os.path.join(save_dir, f"{args.name}_seed{args.seed}_final.pth")
     if os.path.exists(checkpoint_filename) and not args.force_restart:
-        # model = ConfLUNet(in_channels=n_channels, num_classes=2, separate_decoders=args.separate_decoders,
-        #                   scale_offsets=args.offsets_scale).to(device)
         model = get_network_from_plans(
             "conflunet.architecture.nnconflunet.nnConfLUNet",#configuration.network_arch_class_name,
             configuration.network_arch_init_kwargs,
@@ -224,8 +167,7 @@ def main(args):
         start_epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['state_dict'])
 
-        # optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
-        optimizer = torch.optim.Adam(model.parameters(), args.learning_rate, weight_decay=0.0005)
+        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
         optimizer.load_state_dict(checkpoint['optimizer'])
 
         if not args.wandb_ignore:
@@ -234,35 +176,25 @@ def main(args):
 
         # Initialize scheduler
         lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
-        # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.n_epochs)
-        # lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=args.n_epochs)
         lr_scheduler.load_state_dict(checkpoint["scheduler"])
 
         print(f"\nResuming training: (epoch {checkpoint['epoch']})\nLoaded checkpoint '{checkpoint_filename}'\n")
 
     else:
-        if args.path_model is not None:
-            print(f"Retrieving pretrained model from {args.path_model}")
-            # model = get_pretrained_model(args.path_model, n_channels)
-            raise NotImplementedError
-        else:
-            print(f"Initializing new model with {n_channels} input channels")
-            # model = ConfLUNet(in_channels=n_channels, num_classes=2, separate_decoders=args.separate_decoders,
-            #                           scale_offsets=args.offsets_scale, track_running_stats = not args.debug).to(device)
-            model = get_network_from_plans(
-                "conflunet.architecture.nnconflunet.nnConfLUNet",  # configuration.network_arch_class_name,
-                configuration.network_arch_init_kwargs,
-                configuration.network_arch_init_kwargs_req_import,
-                n_channels,
-                output_channels=2,
-                allow_init=True,
-                deep_supervision=False
-            )
+        print(f"Initializing new model with {n_channels} input channels")
+        model = get_network_from_plans(
+            "conflunet.architecture.nnconflunet.nnConfLUNet",  # configuration.network_arch_class_name,
+            configuration.network_arch_init_kwargs,
+            configuration.network_arch_init_kwargs_req_import,
+            n_channels,
+            output_channels=2,
+            allow_init=True,
+            deep_supervision=False
+        )
 
         model.to(device)
 
         optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
-        # optimizer = torch.optim.Adam(model.parameters(), args.learning_rate, weight_decay=0.0005)
 
         start_epoch = 0
         if not args.wandb_ignore:
@@ -272,9 +204,37 @@ def main(args):
 
         # Initialize scheduler
         lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
-        # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.n_epochs)
-        # lr_scheduler = torch.optim.lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=args.n_epochs)
 
+    return model, optimizer, lr_scheduler, start_epoch, wandb_run_id
+
+
+def main(args):
+    seed_val = args.seed
+    seed_everything(seed_val)
+
+    device = get_default_device()
+    torch.multiprocessing.set_sharing_strategy('file_system')
+
+    dataset_name = convert_id_to_dataset_name(args.dataset_id)
+    plans_file = pjoin(nnUNet_preprocessed, dataset_name, 'nnUNetPlans.json')
+    plans_manager = PlansManagerInstanceSeg(plans_file)
+    configuration = plans_manager.get_configuration('3d_fullres')
+    n_channels = len(plans_manager.foreground_intensity_properties_per_channel)
+
+    if args.debug:
+        args.name = f"DEBUG_{args.name}"
+
+    save_dir = pjoin(nnUNet_results, dataset_name, args.name, 'fold_%d' % args.fold)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    if args.save_predictions or args.debug:
+        patches_save_dir = pjoin(save_dir, 'saved_patches')
+        os.makedirs(patches_save_dir, exist_ok=True)
+
+    checkpoint_filename = os.path.join(save_dir, f"checkpoint_final.pth")
+    model, optimizer, lr_scheduler, start_epoch, wandb_run_id = \
+        get_model_optimizer_and_scheduler(args, configuration, n_channels, device, checkpoint_filename)
 
     # Initialize dataloaders
     train_loader = get_train_dataloader_from_dataset_id_and_fold(args.dataset_id, args.fold,
@@ -309,12 +269,7 @@ def main(args):
         print("-" * 10)
         print(f"epoch {epoch + 1}/{epoch_num}")
         model.train()
-        epoch_loss = 0
-        epoch_loss_ce = 0
-        epoch_loss_dice = 0
-        epoch_loss_seg = 0
-        epoch_loss_mse = 0
-        epoch_loss_offsets = 0
+        epoch_loss = epoch_loss_ce = epoch_loss_dice = epoch_loss_seg = epoch_loss_mse = epoch_loss_offsets = 0
 
         for batch_idx, batch_data in enumerate(train_loader):
             start_batch_time = time.time()
@@ -325,18 +280,17 @@ def main(args):
                 batch_data["offsets"].to(device))
 
             if (args.debug or args.save_predictions) and epoch == 0 and batch_idx == 0:
-                save_patch(inputs.cpu().numpy(), f'{epoch}_image')
-                save_patch(labels.cpu().numpy().astype(np.int16), f'{epoch}_labels')
-                save_patch(center_heatmap.cpu().numpy(), f'{epoch}_center_heatmap')
-                save_patch(offsets.cpu().numpy(), f'{epoch}_offsets')
+                save_patch(inputs.cpu().numpy(), f'{epoch}_image', patches_save_dir)
+                save_patch(labels.cpu().numpy().astype(np.int16), f'{epoch}_labels', patches_save_dir)
+                save_patch(center_heatmap.cpu().numpy(), f'{epoch}_center_heatmap', patches_save_dir)
+                save_patch(offsets.cpu().numpy(), f'{epoch}_offsets', patches_save_dir)
 
-            #with torch.cuda.amp.autocast():
             semantic_pred, center_pred, offsets_pred = model(inputs)
 
             if args.debug and (epoch+1) % val_interval == 0 and batch_idx == len(train_loader) - 1:
-                save_patch(semantic_pred.detach().cpu().numpy().astype(np.int16), f'{epoch}_trainpred_labels')
-                save_patch(center_pred.detach().cpu().numpy(), f'{epoch}_trainpred_center_heatmap')
-                save_patch(offsets.detach().cpu().numpy(), f'{epoch}_trainpred_offsets')
+                save_patch(semantic_pred.detach().cpu().numpy().astype(np.int16), f'{epoch}_trainpred_labels', patches_save_dir)
+                save_patch(center_pred.detach().cpu().numpy(), f'{epoch}_trainpred_center_heatmap', patches_save_dir)
+                save_patch(offsets.detach().cpu().numpy(), f'{epoch}_trainpred_offsets', patches_save_dir)
 
             res = compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatmap, offsets)
             loss, dice_loss, focal_loss, segmentation_loss, mse_loss, offset_loss = res
@@ -389,14 +343,8 @@ def main(args):
             start_validation_time = time.time()
             model.eval()
             with torch.no_grad():
-                avg_val_loss = 0
-                avg_val_dice_loss = 0
-                avg_val_ce_loss = 0
-                avg_val_seg_loss = 0
-                avg_val_mse_loss = 0
-                avg_val_offsets_loss = 0
-                total_dice = 0
-                total_ndsc = 0
+                avg_val_loss = avg_val_dice_loss = avg_val_ce_loss = avg_val_seg_loss = avg_val_mse_loss = avg_val_offsets_loss = 0
+                total_dice = total_ndsc = 0
                 batch_size = 0
 
                 for batch_idx, val_data in enumerate(val_loader):
@@ -419,11 +367,11 @@ def main(args):
                        binary_seg = np.squeeze(binary_seg)
 
                     if (args.debug or args.save_predictions) and batch_idx == 0:
-                        save_patch(val_inputs.cpu().numpy(), f'{epoch}_pred_image')
-                        save_patch(val_center_pred.cpu().numpy(), f'{epoch}_pred_center_heatmap')
-                        save_patch(val_offsets_pred.cpu().numpy(), f'{epoch}_pred_offsets')
-                        save_patch(val_seg_pred[0], f"{epoch}_pred_segmentation_proba")
-                        save_patch(binary_seg[0], f"{epoch}_pred_segmentation_binary")
+                        save_patch(val_inputs.cpu().numpy(), f'{epoch}_pred_image', patches_save_dir)
+                        save_patch(val_center_pred.cpu().numpy(), f'{epoch}_pred_center_heatmap', patches_save_dir)
+                        save_patch(val_offsets_pred.cpu().numpy(), f'{epoch}_pred_offsets', patches_save_dir)
+                        save_patch(val_seg_pred[0], f"{epoch}_pred_segmentation_proba", patches_save_dir)
+                        save_patch(binary_seg[0], f"{epoch}_pred_segmentation_binary", patches_save_dir)
 
                     batch_size = val_labels.shape[0]
                     for mbidx in range(batch_size):
@@ -463,17 +411,17 @@ def main(args):
 
                 if avg_val_loss < best_val_loss:
                     best_val_loss = avg_val_loss
-                    save_path = os.path.join(save_dir, f"{args.name}_seed{args.seed}_best_loss.pth")
+                    save_path = os.path.join(save_dir, f"seed{args.seed}_best_loss.pth")
                     torch.save(model.state_dict(), save_path)
 
                 if total_ndsc > best_ndsc:
                     best_ndsc = total_ndsc
-                    save_path = os.path.join(save_dir, f"{args.name}_seed{args.seed}_best_ndsc.pth")
+                    save_path = os.path.join(save_dir, f"seed{args.seed}_best_ndsc.pth")
                     torch.save(model.state_dict(), save_path)
 
                 if total_dice > best_dsc:
                     best_dsc = total_dice
-                    save_path = os.path.join(save_dir, f"{args.name}_seed{args.seed}_best_dsc.pth")
+                    save_path = os.path.join(save_dir, f"seed{args.seed}_best_dsc.pth")
                     torch.save(model.state_dict(), save_path)
 
                 val_elapsed_time = time.time() - start_validation_time
