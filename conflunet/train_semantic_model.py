@@ -306,7 +306,7 @@ def main(args):
                         val_data["img"].to(device),
                         val_data["seg"].type(torch.LongTensor).to(device),
                     )
-                    val_semantic_pred, val_center_pred, val_offsets_pred = model(val_inputs)
+                    val_semantic_pred = model(val_inputs)
 
                     act = torch.nn.Softmax(dim=1)
                     val_seg_pred = act(val_semantic_pred.clone().detach()).cpu().numpy()
