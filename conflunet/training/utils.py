@@ -33,63 +33,39 @@ def save_patch(data, name, save_dir):
 
 def get_model_optimizer_and_scheduler(args, configuration, n_channels, device, checkpoint_filename, semantic: bool = False):
     wandb_run_id = None
+
     _model = configuration.network_arch_class_name if semantic else "conflunet.architecture.nnconflunet.nnConfLUNet"
-    # Initialize model
+    model = get_network_from_plans(
+        _model,
+        configuration.network_arch_init_kwargs,
+        configuration.network_arch_init_kwargs_req_import,
+        n_channels,
+        output_channels=2,
+        allow_init=True,
+        deep_supervision=False
+    ).to(device)
+
+    # Initialize optimizer and scheduler according to nnunet
+    optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)
+    lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)
+    start_epoch = 0
+
     if os.path.exists(checkpoint_filename) and not args.force_restart:
-        model = get_network_from_plans(
-            _model,
-            configuration.network_arch_init_kwargs,
-            configuration.network_arch_init_kwargs_req_import,
-            n_channels,
-            output_channels=2,
-            allow_init=True,
-            deep_supervision=False
-        ).to(device)
-
         checkpoint = torch.load(checkpoint_filename)
-
         start_epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['state_dict'])
-
-        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5,
-                                    momentum=0.99)  # following nnunet
         optimizer.load_state_dict(checkpoint['optimizer'])
+        lr_scheduler.load_state_dict(checkpoint["scheduler"])
 
         if not args.wandb_ignore:
             wandb_run_id = checkpoint['wandb_run_id']
             wandb.init(project=args.wandb_project, mode="online", name=args.name, resume="must", id=wandb_run_id)
-
-        # Initialize scheduler
-        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
-        lr_scheduler.load_state_dict(checkpoint["scheduler"])
-
         print(f"\nResuming training: (epoch {checkpoint['epoch']})\nLoaded checkpoint '{checkpoint_filename}'\n")
 
-    else:
-        print(f"Initializing new model with {n_channels} input channels")
-        model = get_network_from_plans(
-            _model,
-            configuration.network_arch_init_kwargs,
-            configuration.network_arch_init_kwargs_req_import,
-            n_channels,
-            output_channels=2,
-            allow_init=True,
-            deep_supervision=False
-        )
-
-        model.to(device)
-
-        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5,
-                                    momentum=0.99)  # following nnunet
-
-        start_epoch = 0
-        if not args.wandb_ignore:
-            wandb.login()
-            wandb.init(project=args.wandb_project, mode="online", name=args.name)
-            wandb_run_id = wandb.run.id
-
-        # Initialize scheduler
-        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
+    elif not args.wandb_ignore:
+        wandb.login()
+        wandb.init(project=args.wandb_project, mode="online", name=args.name)
+        wandb_run_id = wandb.run.id
 
     return model, optimizer, lr_scheduler, start_epoch, wandb_run_id
 
