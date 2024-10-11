@@ -1,15 +1,8 @@
-import argparse
-import os
-import glob
-import re
-import torch
 from monai.inferers import sliding_window_inference
 from model import *
-from monai.data import write_nifti
-import numpy as np
 from data_load import get_val_dataloader, get_test_dataloader
 from postprocess import *
-from metrics import dice_metric, dice_norm_metric
+from conflunet.evaluation.metrics import dice_metric, dice_norm_metric
 import nibabel as nib
 from tqdm import tqdm
 

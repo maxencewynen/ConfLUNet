@@ -4,7 +4,7 @@ import numpy as np
 from acvl_utils.cropping_and_padding.bounding_boxes import get_bbox_from_mask, bounding_box_to_slice
 from nnunetv2.preprocessing.cropping.cropping import create_nonzero_mask
 from scipy.ndimage import center_of_mass
-from conflunet.utils import find_confluent_lesions
+from conflunet.evaluation.utils import find_confluent_lesions
 
 
 def load_nii(path, affine=False):

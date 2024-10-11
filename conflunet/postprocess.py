@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.ndimage import maximum_filter, generate_binary_structure, label, labeled_comprehension
+from scipy.ndimage import label
 import argparse
 import torch
 import torch.nn.functional as F
@@ -547,7 +547,7 @@ if __name__ == "__main__":
     from monai.data import write_nifti
 
     if args.compute_metrics:
-        from metrics import *
+        from conflunet.evaluation.metrics import *
 
         metrics_dict = {"Subject_ID": [], "File": []}
         metrics_dict["DSC"] = []

@@ -1,27 +1,23 @@
 import argparse
 import os
-import torch
+from torch.nn import L1Loss, SmoothL1Loss, MSELoss
 from nnunetv2.paths import nnUNet_preprocessed, nnUNet_results
 from nnunetv2.utilities.dataset_name_id_conversion import convert_id_to_dataset_name
-from torch import nn
-from monai.losses import DiceLoss
-from monai.utils import set_determinism
-import numpy as np
-import random
-
 from conflunet.preprocessing.preprocess import PlansManagerInstanceSeg
-from conflunet.architecture.conflunet import *
 from conflunet.architecture.nnconflunet import *
 from conflunet.dataloading.dataloaders import (
     get_train_dataloader_from_dataset_id_and_fold,
     get_val_dataloader_from_dataset_id_and_fold
 )
+from conflunet.training.utils import get_default_device, seed_everything, save_patch
+from conflunet.training.losses import ConfLUNetLoss, SemanticSegmentationLoss
+from conflunet.training.utils import get_model_optimizer_and_scheduler
 import wandb
 from os.path import join as pjoin
-from metrics import *
+from conflunet.evaluation.semantic_segmentation import dice_metric, dice_norm_metric
 import time
-from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
 import warnings
+
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
 
 parser = argparse.ArgumentParser(description='Get all command line arguments.',
@@ -35,6 +31,8 @@ parser.add_argument('--cache_rate', default=0, type=float)
 
 # trainining
 parser.add_argument('--learning_rate', type=float, default=1e-2, help='Specify the initial learning rate')
+parser.add_argument('--dice_loss_weight', type=float, default=0.5, help='Specify the weight of the dice loss')
+parser.add_argument('--focal_loss_weight', type=float, default=1, help='Specify the weight of the focal loss')
 parser.add_argument('--seg_loss_weight', type=float, default=1, help='Specify the weight of the segmentation loss')
 parser.add_argument('--heatmap_loss_weight', type=float, default=1, help='Specify the weight of the heatmap loss')
 parser.add_argument('--offsets_loss_weight', type=float, default=1, help='Specify the weight of the offsets loss')
@@ -59,153 +57,6 @@ parser.add_argument('--debug', default=False, action='store_true',
                     help="Debug mode: use a single batch for training and validation")
 parser.add_argument('--save_predictions', default=False, action='store_true',
                     help="Debug mode: save predictions of the first batch for each validation step")
-
-
-def load_checkpoint(model, optimizer, filename):
-    print(f"=> Loading checkpoint '{filename}'")
-    checkpoint = torch.load(filename)
-    start_epoch = checkpoint['epoch']
-    model.load_state_dict(checkpoint['state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
-    wandb_run_id = checkpoint['wandb_run_id']
-    print(f"\nResuming training: (epoch {checkpoint['epoch']})\nLoaded checkpoint '{filename}'\n")
-
-    return model, optimizer, start_epoch, wandb_run_id
-
-
-def get_default_device():
-    """ Set device """
-    if torch.cuda.is_available():
-        return torch.device('cuda')
-    raise Exception("No GPU device was found: I cannot train without GPU.")
-
-
-def seed_everything(seed_val):
-    random.seed(seed_val)
-    np.random.seed(seed_val)
-    torch.manual_seed(seed_val)
-    torch.cuda.manual_seed_all(seed_val)
-    set_determinism(seed=seed_val)
-
-
-def compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatmap, offsets):
-    # Initialize losses
-    loss_function_dice = DiceLoss(to_onehot_y=True,
-                                  softmax=True, sigmoid=False,
-                                  include_background=False)
-    loss_function_mse = nn.MSELoss()
-    if args.offsets_loss == 'l1':
-        offset_loss_fn = nn.L1Loss(reduction='none')
-    elif args.offsets_loss == 'sl1':
-        offset_loss_fn = nn.SmoothL1Loss(reduction='none')
-    else:
-        raise ValueError(f"Invalid loss function for offsets: {args.offsets_loss}")
-
-    # Initialize other variables and metrics
-    gamma_focal = 2.0
-    dice_weight = 0.5#1
-    focal_weight = 1.0#1
-    seg_loss_weight = args.seg_loss_weight
-    heatmap_loss_weight = args.heatmap_loss_weight
-    offsets_loss_weight = args.offsets_loss_weight
-
-    ### SEGMENTATION LOSS ###
-    # Dice loss
-    dice_loss = loss_function_dice(semantic_pred, labels)
-    # Focal loss
-    ce_loss = nn.CrossEntropyLoss(reduction='none')
-    ce = ce_loss(semantic_pred, torch.squeeze(labels, dim=1))
-    pt = torch.exp(-ce)
-    loss2 = (1 - pt) ** gamma_focal * ce
-    focal_loss = torch.mean(loss2)
-    segmentation_loss = dice_weight * dice_loss + focal_weight * focal_loss
-
-    ### COM PREDICTION LOSS ###
-    mse_loss = loss_function_mse(center_pred, center_heatmap)
-
-    ### COM REGRESSION LOSS ###
-    # Disregard voxels outside the GT segmentation
-    offset_loss_weights_matrix = labels.expand_as(offsets_pred)
-    offset_loss = offset_loss_fn(offsets_pred, offsets) * offset_loss_weights_matrix
-
-    if offset_loss_weights_matrix.sum() > 0:
-        offset_loss = offset_loss.sum() / offset_loss_weights_matrix.sum()
-    else:  # No foreground voxels
-        offset_loss = offset_loss.sum() * 0
-
-    ### TOTAL LOSS ###
-    loss = (seg_loss_weight * segmentation_loss) + (heatmap_loss_weight * mse_loss) + (
-            offsets_loss_weight * offset_loss)
-
-    return loss, dice_loss, focal_loss, segmentation_loss, mse_loss, offset_loss
-
-
-def save_patch(data, name, save_dir):
-    import nibabel as nib
-    import numpy as np
-    tobesaved = data if len(data.shape) == 3 else np.squeeze(data[0,0,:,:,:])
-    nib.save(nib.Nifti1Image(tobesaved, np.eye(4)),
-            pjoin(save_dir, f'{name}.nii.gz'))
-
-
-def get_model_optimizer_and_scheduler(args, configuration, n_channels, device, checkpoint_filename):
-    wandb_run_id = None
-    # Initialize model
-    if os.path.exists(checkpoint_filename) and not args.force_restart:
-        model = get_network_from_plans(
-            "conflunet.architecture.nnconflunet.nnConfLUNet",#configuration.network_arch_class_name,
-            configuration.network_arch_init_kwargs,
-            configuration.network_arch_init_kwargs_req_import,
-            n_channels,
-            output_channels=2,
-            allow_init=True,
-            deep_supervision=False
-        ).to(device)
-
-        checkpoint = torch.load(checkpoint_filename)
-
-        start_epoch = checkpoint['epoch']
-        model.load_state_dict(checkpoint['state_dict'])
-
-        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
-        optimizer.load_state_dict(checkpoint['optimizer'])
-
-        if not args.wandb_ignore:
-            wandb_run_id = checkpoint['wandb_run_id']
-            wandb.init(project=args.wandb_project, mode="online", name=args.name, resume="must", id=wandb_run_id)
-
-        # Initialize scheduler
-        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
-        lr_scheduler.load_state_dict(checkpoint["scheduler"])
-
-        print(f"\nResuming training: (epoch {checkpoint['epoch']})\nLoaded checkpoint '{checkpoint_filename}'\n")
-
-    else:
-        print(f"Initializing new model with {n_channels} input channels")
-        model = get_network_from_plans(
-            "conflunet.architecture.nnconflunet.nnConfLUNet",  # configuration.network_arch_class_name,
-            configuration.network_arch_init_kwargs,
-            configuration.network_arch_init_kwargs_req_import,
-            n_channels,
-            output_channels=2,
-            allow_init=True,
-            deep_supervision=False
-        )
-
-        model.to(device)
-
-        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
-
-        start_epoch = 0
-        if not args.wandb_ignore:
-            wandb.login()
-            wandb.init(project=args.wandb_project, mode="online", name=args.name)
-            wandb_run_id = wandb.run.id
-
-        # Initialize scheduler
-        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
-
-    return model, optimizer, lr_scheduler, start_epoch, wandb_run_id
 
 
 def main(args):
@@ -235,6 +86,19 @@ def main(args):
     checkpoint_filename = os.path.join(save_dir, f"checkpoint_final.pth")
     model, optimizer, lr_scheduler, start_epoch, wandb_run_id = \
         get_model_optimizer_and_scheduler(args, configuration, n_channels, device, checkpoint_filename)
+
+    loss_function_offsets = L1Loss(reduction='none') if args.offsets_loss == 'l1' else SmoothL1Loss(reduction='none')
+    loss_function_segmentation = SemanticSegmentationLoss(dice_loss_weight=args.dice_loss_weight,
+                                                          focal_loss_weight=args.focal_loss_weight)
+
+    loss_fn = ConfLUNetLoss(
+        segmentation_loss_weight=args.seg_loss_weight,
+        offsets_loss_weight=args.offsets_loss_weight,
+        center_heatmap_loss_weight=args.heatmap_loss_weight,
+        loss_function_segmentation=loss_function_segmentation,
+        loss_function_offsets=loss_function_offsets,
+        loss_function_center_heatmap=MSELoss()
+    )
 
     # Initialize dataloaders
     train_loader = get_train_dataloader_from_dataset_id_and_fold(args.dataset_id, args.fold,
@@ -287,12 +151,13 @@ def main(args):
 
             semantic_pred, center_pred, offsets_pred = model(inputs)
 
-            if args.debug and (epoch+1) % val_interval == 0 and batch_idx == len(train_loader) - 1:
-                save_patch(semantic_pred.detach().cpu().numpy().astype(np.int16), f'{epoch}_trainpred_labels', patches_save_dir)
+            if args.debug and (epoch + 1) % val_interval == 0 and batch_idx == len(train_loader) - 1:
+                save_patch(semantic_pred.detach().cpu().numpy().astype(np.int16), f'{epoch}_trainpred_labels',
+                           patches_save_dir)
                 save_patch(center_pred.detach().cpu().numpy(), f'{epoch}_trainpred_center_heatmap', patches_save_dir)
                 save_patch(offsets.detach().cpu().numpy(), f'{epoch}_trainpred_offsets', patches_save_dir)
 
-            res = compute_loss(semantic_pred, center_pred, offsets_pred, labels, center_heatmap, offsets)
+            res = loss_fn(semantic_pred, center_pred, offsets_pred, labels, center_heatmap, offsets)
             loss, dice_loss, focal_loss, segmentation_loss, mse_loss, offset_loss = res
 
             epoch_loss += loss.item()
@@ -311,7 +176,7 @@ def main(args):
 
             elapsed_time = time.time() - start_batch_time
             print(
-                f"Batch {batch_idx + 1}/{len(train_loader)}, train_loss: {loss.item():.4f} " 
+                f"Batch {batch_idx + 1}/{len(train_loader)}, train_loss: {loss.item():.4f} "
                 f"(elapsed time: {int(elapsed_time // 60)}min {int(elapsed_time % 60)}s)")
 
         elapsed_epoch_time = time.time() - start_epoch_time
@@ -334,7 +199,8 @@ def main(args):
             wandb.log(
                 {'Training Loss/Total Loss': epoch_loss, 'Training Segmentation Loss/Dice Loss': epoch_loss_dice,
                  'Training Segmentation Loss/Focal Loss': epoch_loss_ce,
-                 'Training Loss/Segmentation Loss': epoch_loss_seg, 'Training Loss/Center Prediction Loss': epoch_loss_mse,
+                 'Training Loss/Segmentation Loss': epoch_loss_seg,
+                 'Training Loss/Center Prediction Loss': epoch_loss_mse,
                  'Training Loss/Offsets Loss': epoch_loss_offsets, 'Learning rate': current_lr, },
                 step=epoch)
 
@@ -364,7 +230,7 @@ def main(args):
                     binary_seg[binary_seg >= 0.5] = 1
                     binary_seg[binary_seg < 0.5] = 0
                     if len(binary_seg.shape) > 3:
-                       binary_seg = np.squeeze(binary_seg)
+                        binary_seg = np.squeeze(binary_seg)
 
                     if (args.debug or args.save_predictions) and batch_idx == 0:
                         save_patch(val_inputs.cpu().numpy(), f'{epoch}_pred_image', patches_save_dir)
@@ -378,8 +244,7 @@ def main(args):
                         total_dice += dice_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
                         total_ndsc += dice_norm_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
 
-                    res = compute_loss(val_semantic_pred, val_center_pred, val_offsets_pred,
-                            val_labels, val_heatmaps, val_offsets)
+                    res = loss_fn(val_semantic_pred, val_center_pred, val_offsets_pred, val_labels, val_heatmaps, val_offsets)
                     val_loss, val_dice_loss, val_focal_loss, val_segmentation_loss, val_mse_loss, val_offset_loss = res
 
                     avg_val_loss += val_loss.item()
@@ -400,9 +265,11 @@ def main(args):
 
                 if not args.wandb_ignore:
                     wandb.log(
-                        {'Validation Loss/Total Loss': avg_val_loss, 'Validation Segmentation Loss/Dice Loss': avg_val_dice_loss,
+                        {'Validation Loss/Total Loss': avg_val_loss,
+                         'Validation Segmentation Loss/Dice Loss': avg_val_dice_loss,
                          'Validation Segmentation Loss/Focal Loss': avg_val_ce_loss,
-                         'Validation Loss/Segmentation Loss': avg_val_seg_loss, 'Validation Loss/Center Prediction Loss': avg_val_mse_loss,
+                         'Validation Loss/Segmentation Loss': avg_val_seg_loss,
+                         'Validation Loss/Center Prediction Loss': avg_val_mse_loss,
                          'Validation Loss/Offsets Loss': avg_val_offsets_loss,
                          'Validation Metrics/Dice Score': total_dice,
                          'Validation Metrics/Normalized Dice': total_ndsc},
@@ -443,4 +310,3 @@ def main(args):
 if __name__ == "__main__":
     args = parser.parse_args()
     main(args)
-

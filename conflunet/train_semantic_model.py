@@ -1,26 +1,21 @@
 import argparse
 import os
-import torch
 from nnunetv2.paths import nnUNet_preprocessed, nnUNet_results
 from nnunetv2.utilities.dataset_name_id_conversion import convert_id_to_dataset_name
-from torch import nn
-from monai.losses import DiceLoss
-from monai.utils import set_determinism
-import numpy as np
-import random
 
 from conflunet.preprocessing.preprocess import PlansManagerInstanceSeg
-from conflunet.architecture.conflunet import *
 from conflunet.architecture.nnconflunet import *
 from conflunet.dataloading.dataloaders import (
     get_train_dataloader_from_dataset_id_and_fold,
     get_val_dataloader_from_dataset_id_and_fold
 )
+from conflunet.training.utils import get_default_device, seed_everything
 import wandb
 from os.path import join as pjoin
-from metrics import *
+from conflunet.evaluation.semantic_segmentation import dice_metric, dice_norm_metric
+from conflunet.training.utils import get_model_optimizer_and_scheduler
+from conflunet.training.losses import SemanticSegmentationLoss
 import time
-from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
 import warnings
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
 
@@ -34,6 +29,8 @@ parser.add_argument('--num_workers', type=int, default=12, help='Number of worke
 parser.add_argument('--cache_rate', default=0, type=float)
 
 # trainining
+parser.add_argument('--dice_loss_weight', type=float, default=0.5, help='Specify the weight of the dice loss')
+parser.add_argument('--focal_loss_weight', type=float, default=1, help='Specify the weight of the focal loss')
 parser.add_argument('--learning_rate', type=float, default=1e-2, help='Specify the initial learning rate')
 parser.add_argument('--n_epochs', type=int, default=1500, help='Specify the number of epochs to train for')
 
@@ -56,124 +53,12 @@ parser.add_argument('--save_predictions', default=False, action='store_true',
                     help="Debug mode: save predictions of the first batch for each validation step")
 
 
-def load_checkpoint(model, optimizer, filename):
-    print(f"=> Loading checkpoint '{filename}'")
-    checkpoint = torch.load(filename)
-    start_epoch = checkpoint['epoch']
-    model.load_state_dict(checkpoint['state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
-    wandb_run_id = checkpoint['wandb_run_id']
-    print(f"\nResuming training: (epoch {checkpoint['epoch']})\nLoaded checkpoint '{filename}'\n")
-
-    return model, optimizer, start_epoch, wandb_run_id
-
-
-def get_default_device():
-    """ Set device """
-    if torch.cuda.is_available():
-        return torch.device('cuda')
-    raise Exception("No GPU device was found: I cannot train without GPU.")
-
-
-def seed_everything(seed_val):
-    random.seed(seed_val)
-    np.random.seed(seed_val)
-    torch.manual_seed(seed_val)
-    torch.cuda.manual_seed_all(seed_val)
-    set_determinism(seed=seed_val)
-
-
-def compute_loss(semantic_pred, labels):
-    # Initialize losses
-    loss_function_dice = DiceLoss(to_onehot_y=True,
-                                  softmax=True, sigmoid=False,
-                                  include_background=False)
-
-    # Initialize other variables and metrics
-    gamma_focal = 2.0
-    dice_weight = 0.5#1
-    focal_weight = 1.0#1
-
-    ### SEGMENTATION LOSS ###
-    # Dice loss
-    dice_loss = loss_function_dice(semantic_pred, labels)
-    # Focal loss
-    ce_loss = nn.CrossEntropyLoss(reduction='none')
-    ce = ce_loss(semantic_pred, torch.squeeze(labels, dim=1))
-    pt = torch.exp(-ce)
-    loss2 = (1 - pt) ** gamma_focal * ce
-    focal_loss = torch.mean(loss2)
-    segmentation_loss = dice_weight * dice_loss + focal_weight * focal_loss
-
-    return segmentation_loss, dice_loss, focal_loss
-
-
 def save_patch(data, name, save_dir):
     import nibabel as nib
     import numpy as np
     tobesaved = data if len(data.shape) == 3 else np.squeeze(data[0,0,:,:,:])
     nib.save(nib.Nifti1Image(tobesaved, np.eye(4)),
             pjoin(save_dir, f'{name}.nii.gz'))
-
-
-def get_model_optimizer_and_scheduler(args, configuration, n_channels, device, checkpoint_filename):
-    wandb_run_id = None
-    # Initialize model
-    if os.path.exists(checkpoint_filename) and not args.force_restart:
-        model = get_network_from_plans(
-            configuration.network_arch_class_name,
-            configuration.network_arch_init_kwargs,
-            configuration.network_arch_init_kwargs_req_import,
-            n_channels,
-            output_channels=2,
-            allow_init=True,
-            deep_supervision=False
-        ).to(device)
-
-        checkpoint = torch.load(checkpoint_filename)
-
-        start_epoch = checkpoint['epoch']
-        model.load_state_dict(checkpoint['state_dict'])
-
-        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
-        optimizer.load_state_dict(checkpoint['optimizer'])
-
-        if not args.wandb_ignore:
-            wandb_run_id = checkpoint['wandb_run_id']
-            wandb.init(project=args.wandb_project, mode="online", name=args.name, resume="must", id=wandb_run_id)
-
-        # Initialize scheduler
-        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
-        lr_scheduler.load_state_dict(checkpoint["scheduler"])
-
-        print(f"\nResuming training: (epoch {checkpoint['epoch']})\nLoaded checkpoint '{checkpoint_filename}'\n")
-
-    else:
-        print(f"Initializing new model with {n_channels} input channels")
-        model = get_network_from_plans(
-            configuration.network_arch_class_name,
-            configuration.network_arch_init_kwargs,
-            configuration.network_arch_init_kwargs_req_import,
-            n_channels,
-            output_channels=2,
-            allow_init=True,
-            deep_supervision=False
-        )
-
-        model.to(device)
-
-        optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)  # following nnunet
-
-        start_epoch = 0
-        if not args.wandb_ignore:
-            wandb.login()
-            wandb.init(project=args.wandb_project, mode="online", name=args.name)
-            wandb_run_id = wandb.run.id
-
-        # Initialize scheduler
-        lr_scheduler = PolyLRScheduler(optimizer, args.learning_rate, args.n_epochs)  # following nnunet
-
-    return model, optimizer, lr_scheduler, start_epoch, wandb_run_id
 
 
 def main(args):
@@ -203,7 +88,10 @@ def main(args):
 
     checkpoint_filename = os.path.join(save_dir, f"checkpoint_final.pth")
     model, optimizer, lr_scheduler, start_epoch, wandb_run_id = \
-        get_model_optimizer_and_scheduler(args, configuration, n_channels, device, checkpoint_filename)
+        get_model_optimizer_and_scheduler(args, configuration, n_channels, device, checkpoint_filename, semantic=True)
+
+    loss_fn = SemanticSegmentationLoss(dice_loss_weight=args.dice_loss_weight,
+                                                          focal_loss_weight=args.focal_loss_weight)
 
     # Initialize dataloaders
     train_loader = get_train_dataloader_from_dataset_id_and_fold(args.dataset_id, args.fold,
@@ -256,7 +144,7 @@ def main(args):
             if args.debug and (epoch+1) % val_interval == 0 and batch_idx == len(train_loader) - 1:
                 save_patch(semantic_pred.detach().cpu().numpy().astype(np.int16), f'{epoch}_trainpred_labels', patches_save_dir)
 
-            loss, dice_loss, focal_loss = compute_loss(semantic_pred, labels)
+            loss, dice_loss, focal_loss = loss_fn(semantic_pred, labels)
 
             epoch_loss += loss.item()
             epoch_loss_ce += focal_loss.item()
@@ -329,7 +217,7 @@ def main(args):
                         total_dice += dice_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
                         total_ndsc += dice_norm_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
 
-                    val_loss, val_dice_loss, val_focal_loss = compute_loss(val_semantic_pred, val_labels)
+                    val_loss, val_dice_loss, val_focal_loss = loss_fn(val_semantic_pred, val_labels)
 
                     avg_val_loss += val_loss.item()
                     avg_val_dice_loss += val_dice_loss.item()
