@@ -20,7 +20,7 @@ class SemanticSegmentationLoss(Callable):
         self.focal_loss_weight = focal_loss_weight
         self.gamma = gamma
 
-    def forward(
+    def __call__(
             self,
             prediction: torch.Tensor,
             reference: torch.Tensor
