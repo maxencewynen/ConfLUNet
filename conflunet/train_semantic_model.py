@@ -1,22 +1,21 @@
-import argparse
 import os
-from nnunetv2.paths import nnUNet_preprocessed, nnUNet_results
-from nnunetv2.utilities.dataset_name_id_conversion import convert_id_to_dataset_name
-
-from conflunet.preprocessing.preprocess import PlansManagerInstanceSeg
-from conflunet.architecture.nnconflunet import *
-from conflunet.dataloading.dataloaders import (
-    get_train_dataloader_from_dataset_id_and_fold,
-    get_val_dataloader_from_dataset_id_and_fold
-)
-from conflunet.training.utils import get_default_device, seed_everything, save_patch
+import time
 import wandb
+import argparse
+import warnings
 from os.path import join as pjoin
+
+from nnunetv2.paths import nnUNet_results
+
+from conflunet.architecture.nnconflunet import *
+from conflunet.utilities.planning_and_configuration import load_dataset_and_configuration
+from conflunet.dataloading.dataloaders import get_train_dataloader_from_dataset_id_and_fold
+from conflunet.dataloading.dataloaders import get_val_dataloader_from_dataset_id_and_fold
+from conflunet.training.utils import get_default_device, seed_everything, save_patch
 from conflunet.evaluation.semantic_segmentation import dice_metric, dice_norm_metric
 from conflunet.training.utils import get_model_optimizer_and_scheduler
 from conflunet.training.losses import SemanticSegmentationLoss
-import time
-import warnings
+
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
 
 parser = argparse.ArgumentParser(description='Get all command line arguments.',
@@ -60,11 +59,7 @@ def main(args):
     torch.multiprocessing.set_sharing_strategy('file_system')
 
     ### Dataset configuration ###
-    dataset_name = convert_id_to_dataset_name(args.dataset_id)
-    plans_file = pjoin(nnUNet_preprocessed, dataset_name, 'nnUNetPlans.json')
-    plans_manager = PlansManagerInstanceSeg(plans_file)
-    configuration = plans_manager.get_configuration('3d_fullres')
-    n_channels = len(plans_manager.foreground_intensity_properties_per_channel)
+    dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(args.dataset_id)
 
     # Initialize dataloaders
     train_loader = get_train_dataloader_from_dataset_id_and_fold(args.dataset_id, args.fold,

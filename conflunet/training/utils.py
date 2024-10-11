@@ -2,12 +2,12 @@ import torch
 import os
 import numpy as np
 import random
+import wandb
 import nibabel as nib
 from os.path import join as pjoin
 from monai.utils import set_determinism
-import wandb
+from conflunet.architecture.utils import get_model
 from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
-from conflunet.architecture.nnconflunet import get_network_from_plans
 
 
 def get_default_device():
@@ -33,17 +33,7 @@ def save_patch(data, name, save_dir):
 
 def get_model_optimizer_and_scheduler(args, configuration, n_channels, device, checkpoint_filename, semantic: bool = False):
     wandb_run_id = None
-
-    _model = configuration.network_arch_class_name if semantic else "conflunet.architecture.nnconflunet.nnConfLUNet"
-    model = get_network_from_plans(
-        _model,
-        configuration.network_arch_init_kwargs,
-        configuration.network_arch_init_kwargs_req_import,
-        n_channels,
-        output_channels=2,
-        allow_init=True,
-        deep_supervision=False
-    ).to(device)
+    model = get_model(configuration, n_channels, semantic).to(device)
 
     # Initialize optimizer and scheduler according to nnunet
     optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, weight_decay=3e-5, momentum=0.99)

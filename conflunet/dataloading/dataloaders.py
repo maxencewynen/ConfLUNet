@@ -1,13 +1,12 @@
 from typing import List, Union
 
-from nnunetv2.training.dataloading.utils import get_case_identifiers
-from nnunetv2.utilities.dataset_name_id_conversion import convert_id_to_dataset_name
-from batchgenerators.utilities.file_and_folder_operations import join, isfile, load_json, isdir, subfiles, maybe_mkdir_p
+from batchgenerators.utilities.file_and_folder_operations import join, isfile, load_json
 from nnunetv2.paths import nnUNet_preprocessed
+from nnunetv2.training.dataloading.utils import get_case_identifiers
 
-from conflunet.dataloading.utils import get_train_transforms, get_val_transforms, get_test_transforms
 from conflunet.dataloading.datasets import LesionInstancesDataset
-from conflunet.preprocessing.preprocess import PlansManagerInstanceSeg
+from conflunet.utilities.planning_and_configuration import load_dataset_and_configuration
+from conflunet.dataloading.utils import get_train_transforms, get_val_transforms, get_test_transforms
 
 
 def get_train_dataloader(folder: str,
@@ -72,11 +71,7 @@ def get_train_dataloader_from_dataset_id_and_fold(
         num_workers=0,
         cache_rate=1.0,
         seed_val=1):
-    dataset_name = convert_id_to_dataset_name(dataset_id)
-    plans_file = join(nnUNet_preprocessed, dataset_name, 'nnUNetPlans.json')
-    plans_manager = PlansManagerInstanceSeg(plans_file)
-    configuration = plans_manager.get_configuration('3d_fullres')
-    dataset_json = load_json(join(nnUNet_preprocessed, dataset_name, 'dataset.json'))
+    dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(dataset_id)
     # TODO: handle case when dataset is not preprocessed
     preprocessed_dataset_folder = join(nnUNet_preprocessed, dataset_name)
     preprocessed_data_folder = join(preprocessed_dataset_folder, configuration.configuration['data_identifier'])
@@ -97,11 +92,7 @@ def get_val_dataloader_from_dataset_id_and_fold(
         num_workers=0,
         cache_rate=1.0,
         seed_val=1):
-    dataset_name = convert_id_to_dataset_name(dataset_id)
-    plans_file = join(nnUNet_preprocessed, dataset_name, 'nnUNetPlans.json')
-    plans_manager = PlansManagerInstanceSeg(plans_file)
-    configuration = plans_manager.get_configuration('3d_fullres')
-    dataset_json = load_json(join(nnUNet_preprocessed, dataset_name, 'dataset.json'))
+    dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(dataset_id)
     # TODO: handle case when dataset is not preprocessed
     preprocessed_dataset_folder = join(nnUNet_preprocessed, dataset_name)
     preprocessed_data_folder = join(preprocessed_dataset_folder, configuration.configuration['data_identifier'])

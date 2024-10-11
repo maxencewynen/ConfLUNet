@@ -1,21 +1,17 @@
 # Preprocesses .nii or .nii.gz files (and their associated instance segmentations) to create 3D images in nnUNet format.
 # The same preprocessing is applied as in the nnUNet preprocessing pipeline.
-import os
-from functools import lru_cache
 from typing import List, Type, Optional, Tuple, Union
 
+from batchgenerators.utilities.file_and_folder_operations import join, isfile, load_json, isdir, maybe_mkdir_p
 from nnunetv2.experiment_planning.plan_and_preprocess_api import plan_experiment_dataset
-from nnunetv2.preprocessing.preprocessors.default_preprocessor import DefaultPreprocessor
 from nnunetv2.utilities.dataset_name_id_conversion import convert_id_to_dataset_name
 from nnunetv2.configuration import default_num_processes
 from nnunetv2.paths import nnUNet_raw, nnUNet_preprocessed
-from batchgenerators.utilities.file_and_folder_operations import join, isfile, load_json, isdir, subfiles, maybe_mkdir_p
 from nnunetv2.experiment_planning.dataset_fingerprint.fingerprint_extractor import DatasetFingerprintExtractor
-from nnunetv2.utilities.plans_handling.plans_handler import PlansManager, ConfigurationManager
 from nnunetv2.utilities.utils import get_filenames_of_train_images_and_targets
 
 from conflunet.preprocessing.verify_dataset_integrity import verify_dataset_integrity
-from conflunet.preprocessing.preprocessors import InstanceSegProcessor
+from conflunet.utilities.planning_and_configuration import PlansManagerInstanceSeg
 
 
 def extract_fingerprint_dataset(dataset_id: int,
@@ -24,30 +20,10 @@ def extract_fingerprint_dataset(dataset_id: int,
                                 num_processes: int = default_num_processes,
                                 clean: bool = True, verbose: bool = True):
     """
-    This function is exactly the same as the nnUNet implementation, expect for the dataset integrity verification
+    This function is exactly the same as the nnUNet implementation, except for the dataset integrity verification
     """
     fingerprint_extractor = fingerprint_extractor_class(dataset_id, num_processes=num_processes, verbose=verbose)
     return fingerprint_extractor.run(overwrite_existing=clean)
-
-
-class PlansManagerInstanceSeg(PlansManager):
-    def __init__(self, plans_file: str):
-        super(PlansManagerInstanceSeg, self).__init__(plans_file)
-
-    @lru_cache(maxsize=10)
-    def get_configuration(self, configuration_name: str):
-        configuration_dict = self._internal_resolve_configuration_inheritance(configuration_name)
-        return ConfigurationManagerInstanceSeg(configuration_dict)
-
-
-class ConfigurationManagerInstanceSeg(ConfigurationManager):
-    def __init__(self, configuration_dict):
-        super(ConfigurationManagerInstanceSeg, self).__init__(configuration_dict)
-
-    @property
-    @lru_cache(maxsize=1)
-    def preprocessor_class(self):
-        return InstanceSegProcessor
 
 
 def preprocess_dataset(dataset_id: int,
