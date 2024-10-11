@@ -1,7 +1,23 @@
 import numpy as np
 from scipy.ndimage import label
 import warnings
-from conflunet.evaluation.semantic_segmentation import intersection_over_union
+
+
+def intersection_over_union(pred_mask: np.ndarray, ref_mask: np.ndarray) -> float:
+    """
+    Compute the Intersection over Union (IoU) for two masks.
+    Args:
+        pred_mask: numpy.ndarray, binary segmentation mask predicted by the model. Shape [H, W, D].
+        ref_mask: numpy.ndarray, binary ground truth segmentation mask. Shape [H, W, D].
+    Returns:
+        float: Intersection over Union (IoU) score between the predicted mask and the reference mask.
+    """
+    assert pred_mask.shape == ref_mask.shape, "Shapes of pred_mask and ref_mask do not match."
+    assert set(np.unique(pred_mask)).issubset({0,1}), "pred_mask should be binary."
+    assert set(np.unique(ref_mask)).issubset({0,1}), "ref_mask should be binary."
+    intersection = np.logical_and(pred_mask, ref_mask).sum()
+    union = np.logical_or(pred_mask, ref_mask).sum()
+    return intersection / union if union != 0 else 0
 
 
 def find_confluent_instances(instance_segmentation: np.ndarray):

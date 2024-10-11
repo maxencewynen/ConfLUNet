@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 import nibabel as nib
 from conflunet.postprocess import remove_small_lesions_from_instance_segmentation
-from conflunet.evaluation.utils import find_confluent_lesions
-from conflunet.evaluation.semantic_segmentation import dice_metric, dice_norm_metric, intersection_over_union
+from conflunet.evaluation.utils import find_confluent_lesions, intersection_over_union
+from conflunet.evaluation.semantic_segmentation import dice_metric, dice_norm_metric
 from conflunet.evaluation.instance_segmentation import panoptic_quality, dice_per_tp
 from conflunet.evaluation.detection import f_beta_score, recall, precision, pred_lesion_count, ref_lesion_count, DiC
 from conflunet.evaluation.utils import match_instances
