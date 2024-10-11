@@ -62,43 +62,15 @@ parser.add_argument('--save_predictions', default=False, action='store_true',
 def main(args):
     seed_val = args.seed
     seed_everything(seed_val)
-
     device = get_default_device()
     torch.multiprocessing.set_sharing_strategy('file_system')
 
+    ### Dataset configuration ###
     dataset_name = convert_id_to_dataset_name(args.dataset_id)
     plans_file = pjoin(nnUNet_preprocessed, dataset_name, 'nnUNetPlans.json')
     plans_manager = PlansManagerInstanceSeg(plans_file)
     configuration = plans_manager.get_configuration('3d_fullres')
     n_channels = len(plans_manager.foreground_intensity_properties_per_channel)
-
-    if args.debug:
-        args.name = f"DEBUG_{args.name}"
-
-    save_dir = pjoin(nnUNet_results, dataset_name, args.name, 'fold_%d' % args.fold)
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
-    if args.save_predictions or args.debug:
-        patches_save_dir = pjoin(save_dir, 'saved_patches')
-        os.makedirs(patches_save_dir, exist_ok=True)
-
-    checkpoint_filename = os.path.join(save_dir, f"checkpoint_final.pth")
-    model, optimizer, lr_scheduler, start_epoch, wandb_run_id = \
-        get_model_optimizer_and_scheduler(args, configuration, n_channels, device, checkpoint_filename)
-
-    loss_function_offsets = L1Loss(reduction='none') if args.offsets_loss == 'l1' else SmoothL1Loss(reduction='none')
-    loss_function_segmentation = SemanticSegmentationLoss(dice_loss_weight=args.dice_loss_weight,
-                                                          focal_loss_weight=args.focal_loss_weight)
-
-    loss_fn = ConfLUNetLoss(
-        segmentation_loss_weight=args.seg_loss_weight,
-        offsets_loss_weight=args.offsets_loss_weight,
-        center_heatmap_loss_weight=args.heatmap_loss_weight,
-        loss_function_segmentation=loss_function_segmentation,
-        loss_function_offsets=loss_function_offsets,
-        loss_function_center_heatmap=MSELoss()
-    )
 
     # Initialize dataloaders
     train_loader = get_train_dataloader_from_dataset_id_and_fold(args.dataset_id, args.fold,
@@ -116,24 +88,58 @@ def main(args):
                                                                  cache_rate=args.cache_rate,
                                                                  seed_val=args.seed)
 
-    # Initialize other variables and metrics
+    if args.debug:
+        args.name = f"DEBUG_{args.name}"
+
+    save_dir = pjoin(nnUNet_results, dataset_name, args.name, 'fold_%d' % args.fold)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    if args.save_predictions or args.debug:
+        patches_save_dir = pjoin(save_dir, 'saved_patches')
+        os.makedirs(patches_save_dir, exist_ok=True)
+
+    ### Model and training configuration ###
+    checkpoint_filename = os.path.join(save_dir, f"checkpoint_final.pth")
+    model, optimizer, lr_scheduler, start_epoch, wandb_run_id = \
+        get_model_optimizer_and_scheduler(args, configuration, n_channels, device, checkpoint_filename)
+
+    loss_function_offsets = L1Loss(reduction='none') if args.offsets_loss == 'l1' else SmoothL1Loss(reduction='none')
+    loss_function_segmentation = SemanticSegmentationLoss(dice_loss_weight=args.dice_loss_weight,
+                                                          focal_loss_weight=args.focal_loss_weight)
+
+    loss_fn = ConfLUNetLoss(
+        segmentation_loss_weight=args.seg_loss_weight,
+        offsets_loss_weight=args.offsets_loss_weight,
+        center_heatmap_loss_weight=args.heatmap_loss_weight,
+        loss_function_segmentation=loss_function_segmentation,
+        loss_function_offsets=loss_function_offsets,
+        loss_function_center_heatmap=MSELoss()
+    )
+
+    ### Initialize other variables and metrics ###
     epoch_num = args.n_epochs
     val_interval = args.val_interval
     best_val_loss = np.inf
-    epoch_loss_values, metric_values_nDSC, metric_values_DSC = [], [], []
-    best_dsc = -np.inf
-    best_ndsc = -np.inf
-
-    # Initialize scaler
+    best_metrics = {metric: -np.inf for metric in ["Validation Metrics/Dice Score", "Validation Metrics/Normalized Dice"]}
     scaler = torch.cuda.amp.GradScaler()
 
-    ''' Training loop '''
+    #############################
+    ###     Training Loop     ###
+    #############################
     for epoch in range(start_epoch, epoch_num):
+        n_training_batches = len(train_loader)
         start_epoch_time = time.time()
-        print("-" * 10)
-        print(f"epoch {epoch + 1}/{epoch_num}")
+        print("-" * 10, f"\nepoch {epoch + 1}/{epoch_num}")
         model.train()
-        epoch_loss = epoch_loss_ce = epoch_loss_dice = epoch_loss_seg = epoch_loss_mse = epoch_loss_offsets = 0
+        epoch_loss_values = {
+            'Training Loss/Total Loss': 0,
+            'Training Segmentation Loss/Dice Loss': 0,
+            'Training Segmentation Loss/Focal Loss': 0,
+            'Training Loss/Segmentation Loss': 0,
+            'Training Loss/Center Prediction Loss': 0,
+            'Training Loss/Offsets Loss': 0,
+        }
 
         for batch_idx, batch_data in enumerate(train_loader):
             start_batch_time = time.time()
@@ -160,59 +166,50 @@ def main(args):
             res = loss_fn(semantic_pred, center_pred, offsets_pred, labels, center_heatmap, offsets)
             loss, dice_loss, focal_loss, segmentation_loss, mse_loss, offset_loss = res
 
-            epoch_loss += loss.item()
-            epoch_loss_ce += focal_loss.item()
-            epoch_loss_dice += dice_loss.item()
-            epoch_loss_seg += segmentation_loss.item()
-            epoch_loss_mse += mse_loss.item()
-            epoch_loss_offsets += offset_loss.item()
+            for key, loss in zip(epoch_loss_values.keys(), res):
+                epoch_loss_values[key] += loss.item()
 
             scaler.scale(loss).backward()
-
             scaler.step(optimizer)
             scaler.update()
-
             optimizer.zero_grad()
-
             elapsed_time = time.time() - start_batch_time
-            print(
-                f"Batch {batch_idx + 1}/{len(train_loader)}, train_loss: {loss.item():.4f} "
-                f"(elapsed time: {int(elapsed_time // 60)}min {int(elapsed_time % 60)}s)")
+
+            print(f"Batch {batch_idx + 1}/{len(train_loader)}, train_loss: {loss.item():.4f} "
+                  f"(elapsed time: {int(elapsed_time // 60)}min {int(elapsed_time % 60)}s)")
+
+        for key in epoch_loss_values:
+            epoch_loss_values[key] /= n_training_batches
 
         elapsed_epoch_time = time.time() - start_epoch_time
         print(f"Epoch {epoch + 1} took {int(elapsed_epoch_time // 60)}min {int(elapsed_epoch_time % 60)}s")
-
-        epoch_loss /= len(train_loader)
-        epoch_loss_dice /= len(train_loader)
-        epoch_loss_ce /= len(train_loader)
-        epoch_loss_seg /= len(train_loader)
-        epoch_loss_mse /= len(train_loader)
-        epoch_loss_offsets /= len(train_loader)
-        epoch_loss_values.append(epoch_loss)
-
-        print(f"Epoch {epoch + 1} average loss: {epoch_loss:.4f}")
-
-        current_lr = optimizer.param_groups[0]['lr']
-        lr_scheduler.step()
+        print(f"Epoch {epoch + 1} average loss: {epoch_loss_values['Training Loss/Total Loss']:.4f}")
 
         if not args.wandb_ignore:
-            wandb.log(
-                {'Training Loss/Total Loss': epoch_loss, 'Training Segmentation Loss/Dice Loss': epoch_loss_dice,
-                 'Training Segmentation Loss/Focal Loss': epoch_loss_ce,
-                 'Training Loss/Segmentation Loss': epoch_loss_seg,
-                 'Training Loss/Center Prediction Loss': epoch_loss_mse,
-                 'Training Loss/Offsets Loss': epoch_loss_offsets, 'Learning rate': current_lr, },
-                step=epoch)
+            wandb.log({**epoch_loss_values, **{'Learning rate': optimizer.param_groups[0]['lr']}}, step=epoch)
 
-        ##### Validation #####
+        lr_scheduler.step()
+
+        #############################
+        ###    Validation Loop    ###
+        #############################
         if (epoch + 1) % val_interval == 0:
             start_validation_time = time.time()
+            avg_val_metrics = {
+                'Validation Loss/Total Loss': 0,
+                'Validation Segmentation Loss/Dice Loss': 0,
+                'Validation Segmentation Loss/Focal Loss': 0,
+                'Validation Loss/Segmentation Loss': 0,
+                'Validation Loss/Center Prediction Loss': 0,
+                'Validation Loss/Offsets Loss': 0,
+                'Validation Metrics/Dice Score': 0,
+                'Validation Metrics/Normalized Dice': 0,
+            }
+            batch_size = 0
+            n_batches = len(val_loader)
             model.eval()
-            with torch.no_grad():
-                avg_val_loss = avg_val_dice_loss = avg_val_ce_loss = avg_val_seg_loss = avg_val_mse_loss = avg_val_offsets_loss = 0
-                total_dice = total_ndsc = 0
-                batch_size = 0
 
+            with torch.no_grad():
                 for batch_idx, val_data in enumerate(val_loader):
                     val_inputs, val_labels, val_heatmaps, val_offsets = (
                         val_data["img"].to(device),
@@ -240,62 +237,41 @@ def main(args):
                         save_patch(binary_seg[0], f"{epoch}_pred_segmentation_binary", patches_save_dir)
 
                     batch_size = val_labels.shape[0]
+                    pred = val_labels.cpu().numpy()
                     for mbidx in range(batch_size):
-                        total_dice += dice_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
-                        total_ndsc += dice_norm_metric(np.squeeze(val_labels.cpu().numpy()[mbidx]), binary_seg[mbidx])
+                        avg_val_metrics["Validation Metrics/Dice Score"] += dice_metric(np.squeeze(pred[mbidx]), binary_seg[mbidx])
+                        avg_val_metrics["Validation Metrics/Normalized Dice"] += dice_norm_metric(np.squeeze(pred[mbidx]), binary_seg[mbidx])
 
                     res = loss_fn(val_semantic_pred, val_center_pred, val_offsets_pred, val_labels, val_heatmaps, val_offsets)
-                    val_loss, val_dice_loss, val_focal_loss, val_segmentation_loss, val_mse_loss, val_offset_loss = res
+                    # val_loss, val_dice_loss, val_focal_loss, val_segmentation_loss, val_mse_loss, val_offset_loss = res
 
-                    avg_val_loss += val_loss.item()
-                    avg_val_dice_loss += val_dice_loss.item()
-                    avg_val_ce_loss += val_focal_loss.item()
-                    avg_val_seg_loss += val_segmentation_loss.item()
-                    avg_val_mse_loss += val_mse_loss.item()
-                    avg_val_offsets_loss += val_offset_loss.item()
+                    for key, loss in zip(avg_val_metrics.keys(), res):
+                        if "Loss" in key:
+                            avg_val_metrics[key] += loss.item()
 
-                avg_val_loss /= len(val_loader)
-                avg_val_dice_loss /= len(val_loader)
-                avg_val_ce_loss /= len(val_loader)
-                avg_val_seg_loss /= len(val_loader)
-                avg_val_mse_loss /= len(val_loader)
-                avg_val_offsets_loss /= len(val_loader)
-                total_dice /= (len(val_loader) * batch_size)
-                total_ndsc /= (len(val_loader) * batch_size)
+                for key in avg_val_metrics:
+                    avg_val_metrics[key] /= n_batches * batch_size if "Metrics" in key else n_batches
 
                 if not args.wandb_ignore:
-                    wandb.log(
-                        {'Validation Loss/Total Loss': avg_val_loss,
-                         'Validation Segmentation Loss/Dice Loss': avg_val_dice_loss,
-                         'Validation Segmentation Loss/Focal Loss': avg_val_ce_loss,
-                         'Validation Loss/Segmentation Loss': avg_val_seg_loss,
-                         'Validation Loss/Center Prediction Loss': avg_val_mse_loss,
-                         'Validation Loss/Offsets Loss': avg_val_offsets_loss,
-                         'Validation Metrics/Dice Score': total_dice,
-                         'Validation Metrics/Normalized Dice': total_ndsc},
-                        step=epoch
-                    )
+                    wandb.log(avg_val_metrics, step=epoch)
 
-                if avg_val_loss < best_val_loss:
-                    best_val_loss = avg_val_loss
+                if avg_val_metrics["Validation Loss/Total Loss"] < best_val_loss:
+                    best_val_loss = avg_val_metrics["Validation Loss/Total Loss"]
                     save_path = os.path.join(save_dir, f"best_loss.pth")
                     torch.save(model.state_dict(), save_path)
 
-                if total_ndsc > best_ndsc:
-                    best_ndsc = total_ndsc
-                    save_path = os.path.join(save_dir, f"best_ndsc.pth")
-                    torch.save(model.state_dict(), save_path)
-
-                if total_dice > best_dsc:
-                    best_dsc = total_dice
-                    save_path = os.path.join(save_dir, f"best_dsc.pth")
-                    torch.save(model.state_dict(), save_path)
+                for metric in best_metrics.keys():
+                    if avg_val_metrics[metric] > best_metrics[metric]:
+                        best_metrics[metric] = avg_val_metrics[metric]
+                        name = metric.replace('Validation Metrics/', '').replace(' ', '_')
+                        save_path = os.path.join(save_dir, f"best_{name}.pth")
+                        torch.save(model.state_dict(), save_path)
 
                 val_elapsed_time = time.time() - start_validation_time
-                print(f"Validation took {int(val_elapsed_time // 60)}min {int(val_elapsed_time % 60)}s")
-                print(f"Validation Loss: {avg_val_loss:.4f}")
-                print(f"Validation DSC: {total_dice:.4f} (best DSC: {best_dsc:.4f})")
-                print(f"Validation nDSC: {total_ndsc:.4f} (best nDSC: {best_ndsc:.4f})")
+                print(f"Validation took {int(val_elapsed_time // 60)}min {int(val_elapsed_time % 60)}s\n"
+                      f"Validation Loss/Total Loss: {avg_val_metrics['Validation Loss/Total Loss']:.4f}")
+                for key in avg_val_metrics:
+                    print(f"{key}: {avg_val_metrics[key]:.4f}")
 
         if not args.debug and not args.wandb_ignore:
             torch.save({
