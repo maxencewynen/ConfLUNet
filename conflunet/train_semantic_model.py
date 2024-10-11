@@ -212,7 +212,7 @@ def main(args):
 
                     val_loss, val_dice_loss, val_focal_loss = loss_fn(val_semantic_pred, val_labels)
 
-                    for key, loss in zip(avg_val_metrics.keys(), res):
+                    for key, loss in zip(avg_val_metrics.keys(), [val_loss, val_dice_loss, val_focal_loss]):
                         if "Loss" in key:
                             avg_val_metrics[key] += loss.item()
 
