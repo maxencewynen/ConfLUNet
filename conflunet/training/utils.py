@@ -68,7 +68,7 @@ def get_model_optimizer_and_scheduler(args, configuration, n_channels, device, c
     else:
         print(f"Initializing new model with {n_channels} input channels")
         model = get_network_from_plans(
-            "conflunet.architecture.nnconflunet.nnConfLUNet",  # configuration.network_arch_class_name,
+            _model,
             configuration.network_arch_init_kwargs,
             configuration.network_arch_init_kwargs_req_import,
             n_channels,
