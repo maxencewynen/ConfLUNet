@@ -1,5 +1,5 @@
 import torch
-from conflunet.preprocessing.preprocess import ConfigurationManagerInstanceSeg
+from conflunet.utilities.planning_and_configuration import ConfigurationManagerInstanceSeg
 from conflunet.architecture.nnconflunet import get_network_from_plans
 
 
