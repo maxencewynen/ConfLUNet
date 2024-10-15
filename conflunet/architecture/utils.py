@@ -21,3 +21,24 @@ def load_model(configuration: ConfigurationManagerInstanceSeg, checkpoint: str, 
     checkpoint = torch.load(checkpoint)
     model.load_state_dict(checkpoint['state_dict'])
     return model
+
+
+class DummySemanticModel(torch.nn.Module):
+    # Dummy model for testing purposes
+    def __init__(self):
+        super(DummySemanticModel, self).__init__()
+
+    def forward(self, x):
+        # fg = torch.zeros(x.shape, device=x.device)
+        # fg[:, :, 50:55, 50:55, 50:55] = torch.ones((1, 1, 5, 5, 5), device=x.device)
+        fg = x > 1.8
+        fg = fg.to(torch.bool)
+
+        _in = torch.zeros(x.shape, device=x.device)
+        _in[fg] = 1000
+        _in[~fg] = -1000
+        _out = torch.zeros(x.shape, device=x.device)
+        _out[fg] = -1000
+        _out[~fg] = 1000
+        out = torch.cat([_out, _in], dim=1)
+        return out

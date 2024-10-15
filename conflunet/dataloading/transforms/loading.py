@@ -21,7 +21,6 @@ class CustomLoadNPZInstanced(MapTransform):
         for key in self.key_iterator(d):
             array = np.load(d[key], allow_pickle=False)
             d['img'] = array['data'].astype(np.float32)
-            #d['img'] = (array['seg'] > 0).astype(np.float32)
             if not self.test:
                 # casting the segmentation in np.float32 otherwise there is a weird collate error with monai
                 d['instance_seg'] = array['instance_seg'].astype(np.float32)  
@@ -42,6 +41,8 @@ class CustomLoadNPZInstanced(MapTransform):
                     d['small_object_classes'] = d['small_object_classes'].astype(np.float32)
                 if 'confluent_instances' in d.keys():
                     d['confluent_instances'] = d['confluent_instances'].astype(np.float32)
+            elif 'seg' in d.keys():
+                d['brainmask'] = (d['seg'] >= 0).astype(np.float32)
             elif 'brainmask' in d.keys():
                 d['brainmask'] = d['brainmask'].astype(np.float32)
 

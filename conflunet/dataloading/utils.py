@@ -1,30 +1,20 @@
 import warnings
-
 import numpy as np
-
-from monai.transforms import (
-    ToTensord, RandFlipd, RandScaleIntensityd, FgBgToIndicesd, RandGaussianNoised, RandGaussianSmoothd)
-import numpy as np
-import torch
 from typing import Callable, Tuple, Sequence, Mapping, Hashable, Any, Union
-from copy import deepcopy
-from monai.data.meta_tensor import MetaTensor
-import torch.nn.functional as F
-import os
-import nibabel as nib
-from monai.transforms import MapTransform
-from monai.config import KeysCollection
-from copy import copy
 
-
-from os.path import exists as pexists
-from pickle import load
 from monai.transforms import (
+    ToTensord,
+    RandFlipd,
+    RandScaleIntensityd,
+    FgBgToIndicesd,
+    RandGaussianNoised,
+    RandGaussianSmoothd,
     Compose,
     RandAffined,
     RandSpatialCropd,
     RandCropByPosNegLabeld,
 )
+
 from conflunet.dataloading.transforms.data_augmentations.scaleintensityfixedmean import RandScaleIntensityFixedMeand
 from conflunet.dataloading.transforms.data_augmentations.adjustcontrast import RandAdjustContrastd
 from conflunet.dataloading.transforms.data_augmentations.simulatelowresolution import RandSimulateLowResolutiond
@@ -33,8 +23,8 @@ from conflunet.dataloading.transforms.utils import *
 
 
 def get_nnunet_spatial_transforms(image_key: str = "img",
-                                  seg_keys: tuple = ("seg", "instance_seg"),
-                                  spatial_size: tuple = ()):
+                                  seg_keys: Tuple = ("seg", "instance_seg"),
+                                  spatial_size: Tuple = ()) -> Sequence[Callable]:
     keys = [image_key] + seg_keys
     interpolation = ("bilinear",) + ("nearest",) * len(seg_keys)
     
@@ -52,7 +42,8 @@ def get_nnunet_spatial_transforms(image_key: str = "img",
     return transforms
 
 
-def get_nnunet_augmentations(image_key: str = "img", seg_keys: list = ("seg", "instance_seg")):
+def get_nnunet_augmentations(image_key: str = "img", seg_keys: Sequence[str] = ("seg", "instance_seg"))\
+        -> Sequence[Callable]:
     keys = [image_key] + seg_keys
 
     transforms = []
@@ -118,7 +109,7 @@ def get_nnunet_augmentations(image_key: str = "img", seg_keys: list = ("seg", "i
 
 
 def get_train_transforms(seed: Union[int, None] = None,
-                         patch_size: tuple = (128, 128, 128)):
+                         patch_size: Tuple = (128, 128, 128)) -> Compose:
     transform_list = [
         CustomLoadNPZInstanced(keys=['data']),
         FgBgToIndicesd(keys=['seg']),
@@ -148,7 +139,7 @@ def get_train_transforms(seed: Union[int, None] = None,
 
 
 def get_val_transforms(seed: Union[int, None] = None,
-                       patch_size: tuple = (128, 128, 128)):
+                       patch_size: Tuple = (128, 128, 128)) -> Compose:
 
     transform_list = [
         CustomLoadNPZInstanced(keys=['data']),
@@ -172,9 +163,9 @@ def get_val_transforms(seed: Union[int, None] = None,
     return transform
 
 
-def get_test_transforms():
+def get_test_transforms(test: bool = True) -> Compose:
     transform_list = [
-        CustomLoadNPZInstanced(keys=['data'], test=True),
+        CustomLoadNPZInstanced(keys=['data'], test=test),
         ToTensord(keys=['img', 'brainmask'], allow_missing_keys=True),
         DeleteKeysd(keys=['properties']),
     ]

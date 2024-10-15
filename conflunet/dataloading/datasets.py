@@ -1,11 +1,9 @@
-from typing import List, Union
-
 import monai
-
-from batchgenerators.utilities.file_and_folder_operations import join, load_pickle, isfile
-from nnunetv2.training.dataloading.utils import get_case_identifiers
-from nnunetv2.training.dataloading.nnunet_dataset import nnUNetDataset
+from typing import List, Union
 from monai.data import CacheDataset, DataLoader
+
+from batchgenerators.utilities.file_and_folder_operations import join
+from nnunetv2.training.dataloading.utils import get_case_identifiers
 
 
 class LesionInstancesDataset(CacheDataset):
