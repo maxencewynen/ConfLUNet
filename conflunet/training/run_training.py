@@ -33,7 +33,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.semantic:
         kwargs = vars(args)
-        del kwargs['heatmap_loss_weight'], kwargs['offsets_loss_weight'], kwargs['offsets_loss']
+        del kwargs['heatmap_loss_weight'], kwargs['offsets_loss_weight'], kwargs['offsets_loss'], kwargs['semantic']
         kwargs['wandb_project'] = "ConfLUNet_Semantic"
         trainer = SemanticTrainer(**vars(args))
     else:
