@@ -60,6 +60,7 @@ class TrainingPipeline:
         self.weight_decay = weight_decay
         self.momentum = momentum
         self.semantic = semantic
+        self.save_dir = None
         self.patches_save_dir = None
 
         self.device = get_default_device()
@@ -75,7 +76,7 @@ class TrainingPipeline:
         self._edit_name()
 
         # Directory setup
-        self.save_dir = self.setup_save_dir()
+        self.setup_save_dir()
 
         # Checkpoint filename
         self.checkpoint_filename = os.path.join(self.save_dir, f"checkpoint_final.pth")
@@ -86,10 +87,6 @@ class TrainingPipeline:
 
         # Loss functions
         self.loss_fn = self.get_loss_functions()
-
-        if self.save_predictions or self.debug:
-            patches_save_dir = pjoin(self.save_dir, 'saved_patches')
-            os.makedirs(patches_save_dir, exist_ok=True)
 
         # Metrics and tracking
         self.best_val_loss = np.inf
@@ -119,20 +116,12 @@ class TrainingPipeline:
             self.model_name = f"DEBUG_{self.model_name}"
 
     def setup_save_dir(self):
-        save_dir = pjoin(nnUNet_results, self.dataset_name, self.model_name, 'fold_%d' % self.fold)
-        if not os.path.exists(self.save_dir):
-            os.makedirs(save_dir)
+        self.save_dir = pjoin(nnUNet_results, self.dataset_name, self.model_name, 'fold_%d' % self.fold)
+        os.makedirs(self.save_dir, exist_ok=True)
 
         if self.save_predictions or self.debug:
-            patches_save_dir = pjoin(save_dir, 'saved_patches')
-            os.makedirs(patches_save_dir, exist_ok=True)
-
-        save_dir = os.path.join(nnUNet_results, self.dataset_name, self.model_name, 'fold_%d' % self.fold)
-        os.makedirs(save_dir, exist_ok=True)
-        if self.save_predictions or self.debug:
-            patches_save_dir = os.path.join(save_dir, 'saved_patches')
-            os.makedirs(patches_save_dir, exist_ok=True)
-        return save_dir
+            self.patches_save_dir = pjoin(self.save_dir, 'saved_patches')
+            os.makedirs(self.patches_save_dir, exist_ok=True)
 
     def get_model_optimizer_and_scheduler(self,) -> Tuple[nn.Module, torch.optim.Optimizer, object, int, str]:
         self.wandb_run_id = None
