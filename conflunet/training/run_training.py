@@ -25,7 +25,6 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=1, help='Specify the global random seed')
     parser.add_argument('--val_interval', type=int, default=5, help='Validation every n-th epochs')
     parser.add_argument('--wandb_ignore', action="store_true", default=False, help='Whether to ignore this run in wandb')
-    parser.add_argument('--wandb_project', type=str, default='ConfLUNet_Semantic', help='wandb project name')
     parser.add_argument('--name', default="idiot without a name", help='Wandb run name')
     parser.add_argument('--force_restart', default=False, action='store_true', help="force the training to restart at 0 even if a checkpoint was found")
     parser.add_argument('--debug', default=False, action='store_true', help="Debug mode: use a single batch for training and validation")
@@ -35,6 +34,7 @@ if __name__ == '__main__':
     if args.semantic:
         kwargs = vars(args)
         del kwargs['heatmap_loss_weight'], kwargs['offsets_loss_weight'], kwargs['offsets_loss']
+        kwargs['wandb_project'] = "ConfLUNet_Semantic"
         trainer = SemanticTrainer(**vars(args))
     else:
         raise NotImplementedError("Only semantic training is supported at the moment")
