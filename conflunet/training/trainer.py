@@ -194,7 +194,7 @@ class TrainingPipeline:
 
         self.average_epoch_logs(epoch_logs)
 
-        self.print_epoch_summary(epoch_logs, len(self.train_loader), start_epoch_time)
+        self.print_epoch_summary(epoch_logs, start_epoch_time, epoch)
 
         if not self.wandb_ignore:
             wandb.log({**epoch_logs, **{'Learning rate': self.optimizer.param_groups[0]['lr']}}, step=epoch)
@@ -233,9 +233,9 @@ class TrainingPipeline:
               f"(elapsed time: {int(elapsed_time // 60)}min {int(elapsed_time % 60)}s)")
 
     @staticmethod
-    def print_epoch_summary(epoch_loss_values, n_batches, start_epoch_time):
-        for key in epoch_loss_values:
-            epoch_loss_values[key] /= n_batches
+    def print_epoch_summary(epoch_loss_values, start_epoch_time, epoch):
+        elapsed_epoch_time = time.time() - start_epoch_time
+        print(f"Epoch {epoch + 1} took {int(elapsed_epoch_time // 60)}min {int(elapsed_epoch_time % 60)}s")
         print(f"Epoch average loss: {epoch_loss_values['Training Loss/Total Loss']:.4f}")
 
     def validate_epoch(self, epoch):
@@ -259,18 +259,13 @@ class TrainingPipeline:
 
             self.average_val_logs(avg_val_metrics)
 
-            val_elapsed_time = time.time() - start_validation_time
-            print(f"Validation took {int(val_elapsed_time // 60)}min {int(val_elapsed_time % 60)}s\n"
-                  f"Validation Loss/Total Loss: {avg_val_metrics['Validation Loss/Total Loss']:.4f}")
-            for key in avg_val_metrics:
-                print(f"{key}: {avg_val_metrics[key]:.4f}")
-
             if not self.wandb_ignore:
                 wandb.log(avg_val_metrics, step=epoch)
 
     @staticmethod
-    def print_val_summary(avg_val_metrics, epoch):
-        print(f"Validation Loss/Total Loss: {avg_val_metrics['Validation Loss/Total Loss']:.4f}")
+    def print_val_summary(avg_val_metrics, start_validation_time):
+        val_elapsed_time = time.time() - start_validation_time
+        print(f"Validation took {int(val_elapsed_time // 60)}min {int(val_elapsed_time % 60)}s")
         for key in avg_val_metrics:
             print(f"{key}: {avg_val_metrics[key]:.4f}")
 
