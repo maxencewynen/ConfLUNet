@@ -62,6 +62,12 @@ class TrainingPipeline:
         self.semantic = semantic
         self.save_dir = None
         self.patches_save_dir = None
+        self.model = None
+        self.optimizer = None
+        self.lr_scheduler = None
+        self.start_epoch = None
+        self.loss_fn = None
+        self.wandb_run_id = None
 
         self.device = get_default_device()
         torch.multiprocessing.set_sharing_strategy('file_system')
@@ -82,8 +88,7 @@ class TrainingPipeline:
         self.checkpoint_filename = os.path.join(self.save_dir, f"checkpoint_final.pth")
 
         # Model and optimizer
-        self.model, self.optimizer, self.lr_scheduler, self.start_epoch, self.wandb_run_id = \
-            self.get_model_optimizer_and_scheduler()
+        self.set_model_optimizer_and_scheduler()
 
         # Loss functions
         self.loss_fn = self.get_loss_functions()
@@ -123,7 +128,7 @@ class TrainingPipeline:
             self.patches_save_dir = pjoin(self.save_dir, 'saved_patches')
             os.makedirs(self.patches_save_dir, exist_ok=True)
 
-    def get_model_optimizer_and_scheduler(self,) -> Tuple[nn.Module, torch.optim.Optimizer, object, int, str]:
+    def set_model_optimizer_and_scheduler(self,) -> Tuple[nn.Module, torch.optim.Optimizer, object, int, str]:
         self.wandb_run_id = None
         self.model = get_model(self.configuration, self.n_channels, self.semantic).to(self.device)
 
