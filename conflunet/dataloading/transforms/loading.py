@@ -3,7 +3,7 @@ from monai.transforms import MapTransform
 import numpy as np
 from os.path import exists as pexists
 from pickle import load
-from conflunet.postprocess import remove_small_lesions_from_instance_segmentation
+from conflunet.postprocessing.small_instances_removal import remove_small_lesions_from_instance_segmentation
 from scipy.ndimage import center_of_mass
 
 
