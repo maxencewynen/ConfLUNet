@@ -158,7 +158,7 @@ class TrainingPipeline:
     def get_loss_functions(self):
         raise NotImplementedError("Subclass must implement this method")
 
-    def compute_loss(self, model_outputs, batch_inputs):
+    def compute_loss(self, model_outputs, outputs):
         raise NotImplementedError("Subclass must implement this method")
 
     def save_train_patch_debug(self, batch_inputs, model_outputs, epoch):

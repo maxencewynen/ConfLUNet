@@ -59,8 +59,8 @@ class SemanticTrainer(TrainingPipeline):
         return SemanticSegmentationLoss(dice_loss_weight=self.dice_loss_weight,
                                         focal_loss_weight=self.focal_loss_weight)
 
-    def compute_loss(self, model_outputs, output):
-        return self.loss_fn(output, model_outputs)
+    def compute_loss(self, model_outputs, outputs):
+        return self.loss_fn(model_outputs, outputs)
 
     def save_train_patch_debug(self, batch_inputs, model_outputs, epoch):
         save_patch(batch_inputs[0].cpu().numpy(), f'Epoch-{epoch}_train_image', self.patches_save_dir)
