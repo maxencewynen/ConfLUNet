@@ -1,6 +1,6 @@
 import numpy as np
-from scipy.ndimage import label
 import warnings
+from scipy.ndimage import label
 
 
 def intersection_over_union(pred_mask: np.ndarray, ref_mask: np.ndarray) -> float:

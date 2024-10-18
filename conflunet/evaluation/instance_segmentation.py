@@ -1,6 +1,7 @@
 import numpy as np
-from conflunet.evaluation.utils import match_instances
-from conflunet.evaluation.semantic_segmentation import dice_metric, intersection_over_union
+
+from conflunet.evaluation.utils import match_instances, intersection_over_union
+from conflunet.evaluation.semantic_segmentation import dice_metric
 
 
 def dice_per_tp(pred: np.ndarray, ref: np.ndarray, matched_pairs: list):

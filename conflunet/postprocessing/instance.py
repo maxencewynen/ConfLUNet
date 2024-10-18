@@ -6,10 +6,10 @@ from typing import Dict, Union, Tuple
 
 from monai.config.type_definitions import NdarrayOrTensor
 
-from conflunet.postprocessing.basic_postprocessor import BasicPostprocessor
+from conflunet.postprocessing.basic_postprocessor import Postprocessor
 
 
-class ConfLUNetPostprocessor(BasicPostprocessor):
+class ConfLUNetPostprocessor(Postprocessor):
     def __init__(
             self,
             minimum_instance_size: int = 0,

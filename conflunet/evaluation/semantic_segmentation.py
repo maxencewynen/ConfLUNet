@@ -1,13 +1,7 @@
-import argparse
-import os
-import pandas as pd
 import numpy as np
-import nibabel as nib
-import warnings
-from conflunet.evaluation.utils import find_confluent_lesions
 
 
-def dice_metric(ground_truth: np.ndarray, predictions: np.ndarray) -> float:
+def dice_metric(predictions: np.ndarray, ground_truth: np.ndarray) -> float:
     """
     Computes Dice coefficient for a single example.
     Args:
@@ -33,7 +27,7 @@ def dice_metric(ground_truth: np.ndarray, predictions: np.ndarray) -> float:
     return dice
 
 
-def dice_norm_metric(ground_truth: np.ndarray, predictions: np.ndarray) -> tuple:
+def dice_norm_metric(predictions: np.ndarray, ground_truth: np.ndarray) -> tuple:
     """
     Compute Normalised Dice Coefficient (nDSC),
     False positive rate (FPR), False negative rate (FNR) for a single example.

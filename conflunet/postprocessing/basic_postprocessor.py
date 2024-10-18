@@ -8,7 +8,7 @@ from monai.config.type_definitions import NdarrayOrTensor
 from conflunet.training.utils import get_default_device
 
 
-class BasicPostprocessor(Callable):
+class Postprocessor(Callable):
     def __init__(
             self,
             minimum_instance_size: int = 0,
@@ -17,7 +17,7 @@ class BasicPostprocessor(Callable):
             name: str = "",
             device: torch.device = None,
     ):
-        super(BasicPostprocessor, self).__init__()
+        super(Postprocessor, self).__init__()
         self.minimum_instance_size = minimum_instance_size
         self.minimum_size_along_axis = minimum_size_along_axis
         self.device = get_default_device() if device is None else device

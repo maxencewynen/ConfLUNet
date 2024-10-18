@@ -1,7 +1,5 @@
 import numpy as np
 from scipy.ndimage import label
-import torch
-import torch.nn.functional as F
 from typing import Tuple, Union
 
 

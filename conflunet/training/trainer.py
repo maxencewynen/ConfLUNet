@@ -1,8 +1,6 @@
 import os
 import time
-from typing import Callable
-
-import torch
+from typing import Callable, Dict
 import wandb
 import warnings
 from os.path import join as pjoin
@@ -13,10 +11,15 @@ from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
 
 from conflunet.architecture.nnconflunet import *
 from conflunet.architecture.utils import get_model
+from conflunet.evaluation.semantic_segmentation import dice_metric, dice_norm_metric
+from conflunet.evaluation.instance_segmentation import panoptic_quality
+from conflunet.inference.predictors.base_predictor import Predictor
 from conflunet.utilities.planning_and_configuration import load_dataset_and_configuration
-from conflunet.dataloading.dataloaders import get_train_dataloader_from_dataset_id_and_fold
-from conflunet.dataloading.dataloaders import get_val_dataloader_from_dataset_id_and_fold
-from conflunet.training.utils import get_default_device, seed_everything, save_patch
+from conflunet.dataloading.dataloaders import (
+    get_train_dataloader_from_dataset_id_and_fold,
+    get_val_dataloader_from_dataset_id_and_fold,
+    get_full_val_dataloader_from_dataset_id_and_fold)
+from conflunet.training.utils import get_default_device
 
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
 
@@ -43,6 +46,8 @@ class TrainingPipeline:
                  weight_decay=3e-5,
                  momentum=0.99,
                  semantic: bool = False,
+                 predictors: List[Predictor, ...] = None,
+                 metrics_to_track: Dict[str, Tuple[Callable, bool]] = None
                  ):
         self.dataset_id = dataset_id
         self.fold = fold
@@ -64,8 +69,9 @@ class TrainingPipeline:
         self.weight_decay = weight_decay
         self.momentum = momentum
         self.semantic = semantic
-        self.save_dir = None
-        self.patches_save_dir = None
+        self.predictors = predictors
+        self.metrics_to_track = metrics_to_track
+        self.save_dir = self.full_validation_save_dir = self.patches_save_dir = None
         self.model = None
         self.optimizer = None
         self.lr_scheduler = None
@@ -82,6 +88,7 @@ class TrainingPipeline:
 
         # Dataloaders
         self.train_loader, self.val_loader = self.get_dataloaders()
+        self.full_val_loader = get_full_val_dataloader_from_dataset_id_and_fold(self.dataset_id, self.fold, self.num_workers)
 
         self._edit_name()
 
@@ -99,8 +106,14 @@ class TrainingPipeline:
 
         # Metrics and tracking
         self.best_val_loss = np.inf
-        self.best_metrics = {metric: -np.inf for metric in
-                             ["Validation Metrics/Dice Score", "Validation Metrics/Normalized Dice"]}
+
+        if self.metrics_to_track is None:
+            self.metrics_to_track = {
+                "Validation Metrics/Dice Score": (dice_metric, True), # True means it needs semantic segmentation
+                "Validation Metrics/Normalized Dice": (dice_norm_metric, True),
+                "Validation Metrics/Panoptic Quality": (panoptic_quality, False), # False means it needs instance segmentation
+            }
+        self.best_metrics = {metric: -np.inf for metric in self.metrics_to_track.keys()}
 
         self.scaler = torch.cuda.amp.GradScaler()
 
@@ -131,6 +144,8 @@ class TrainingPipeline:
         if self.save_predictions or self.debug:
             self.patches_save_dir = pjoin(self.save_dir, 'saved_patches')
             os.makedirs(self.patches_save_dir, exist_ok=True)
+            self.full_validation_save_dir = pjoin(self.save_dir, 'saved_predictions')
+            os.makedirs(self.full_validation_save_dir, exist_ok=True)
 
     def set_model_optimizer_and_scheduler(self) -> Tuple[nn.Module, torch.optim.Optimizer, object, int, str]:
         self.wandb_run_id = None
@@ -206,7 +221,7 @@ class TrainingPipeline:
     def initialize_epoch_logs(self) -> dict:
         raise NotImplementedError
 
-    def initialize_val_metrics(self) -> dict:
+    def initialize_val_logs(self) -> dict:
         raise NotImplementedError
 
     def average_epoch_logs(self, epoch_logs: dict) -> None:
@@ -216,6 +231,10 @@ class TrainingPipeline:
     def average_val_logs(self, val_logs: dict) -> None:
         for key in val_logs:
             val_logs[key] /= len(self.val_loader)
+
+    def average_full_val_metrics(self, val_metrics: dict) -> None:
+        for key in val_metrics:
+            val_metrics[key] /= len(self.full_val_loader)
 
     def prepare_batch(self, batch_data: dict) -> Tuple[torch.Tensor, torch.Tensor | Tuple[torch.Tensor, ...]]:
         raise NotImplementedError("Subclass must implement this method")
@@ -245,7 +264,7 @@ class TrainingPipeline:
 
     def validate_epoch(self, epoch: int) -> None:
         self.model.eval()
-        avg_val_losses = self.initialize_val_metrics()
+        avg_val_losses = self.initialize_val_logs()
         start_validation_time = time.time()
         with torch.no_grad():
             for batch_idx, batch_data in enumerate(self.val_loader):
@@ -270,11 +289,49 @@ class TrainingPipeline:
             self.print_val_summary(avg_val_losses, start_validation_time)
 
     def full_validation(self, epoch: int) -> None:
-        raise NotImplementedError("Subclass must implement this method")
+        if self.metrics_to_track is None:
+            return
+
+        self.model.eval()
+        start_full_validation_time = time.time()
+
+        for predictor in self.predictors:
+            avg_val_metrics = {k: 0 for k in self.best_metrics}
+            start_this_predictor = time.time()
+            predictions_loader = predictor.get_predictions_loader(self.full_val_loader, self.model)
+            for gt, pred in zip(self.full_val_loader, predictions_loader):
+                self.update_metrics(avg_val_metrics, gt, pred)
+                if self.save_predictions:
+                    predictor.save_predictions(pred)
+
+            print(f"Predictor {predictor.__class__.__name__} took {time.time() - start_this_predictor:.2f} seconds")
+
+            if not self.wandb_ignore:
+                wandb.log({k + '_' + predictor.postprocessor.name: v for k, v in avg_val_metrics.items()}, step=epoch)
+
+            self.average_full_val_metrics(avg_val_metrics)
+
+    def update_metrics(self, avg_val_metrics: dict, gt: dict, pred: dict) -> None:
+        print("[INFO] Computing metrics ...")
+        instance_seg_pred = pred['instance_seg_pred'].detach().cpu().numpy()
+        semantic_pred_binary = pred['semantic_pred_binary'].detach().cpu().numpy()
+        gt_instance_seg = np.squeeze(gt['instance_seg'].detach().cpu().numpy())
+        gt_semantic = np.squeeze(gt['seg'].detach().cpu().numpy())
+
+        for metric_name, (metric_fn, semantic) in self.metrics_to_track.items():
+            if semantic:
+                avg_val_metrics[metric_name] += metric_fn(semantic_pred_binary, gt_semantic)
+
+        if avg_val_metrics['Validation Metrics/Dice Score'] > 0.6: # Only compute panoptic quality if the semantic segmentation is good
+            for metric_name, (metric_fn, semantic) in self.metrics_to_track.items():
+                if not semantic:
+                    avg_val_metrics[metric_name] += metric_fn(instance_seg_pred, gt_instance_seg)
 
     @staticmethod
-    def print_val_summary(avg_val_losses: dict, start_validation_time: float) -> None:
+    def print_val_summary(avg_val_losses: dict, start_validation_time: float, full: bool = False) -> None:
         val_elapsed_time = time.time() - start_validation_time
+        if full:
+            print("Full", end=" ")
         print(f"Validation took {int(val_elapsed_time // 60)}min {int(val_elapsed_time % 60)}s")
         for key in avg_val_losses:
             print(f"{key}: {avg_val_losses[key]:.4f}")

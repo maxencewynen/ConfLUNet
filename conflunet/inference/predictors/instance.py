@@ -5,18 +5,18 @@ from typing import Optional, Dict
 from monai.inferers import sliding_window_inference
 from monai.config.type_definitions import NdarrayOrTensor
 
-from conflunet.inference.predictors.base_predictor import BasePredictor, BASE_OUTPUT
-from conflunet.postprocessing.basic_postprocessor import BasicPostprocessor
+from conflunet.inference.predictors.base_predictor import Predictor, BASE_OUTPUT
+from conflunet.postprocessing.basic_postprocessor import Postprocessor
 from conflunet.postprocessing.instance import ConfLUNetPostprocessor
 from conflunet.utilities.planning_and_configuration import PlansManagerInstanceSeg
 
 
-class ConfLUNetPredictor(BasePredictor):
+class ConfLUNetPredictor(Predictor):
     def __init__(
             self,
             plans_manager: PlansManagerInstanceSeg,
             model: torch.nn.Module,
-            postprocessor: Optional[BasicPostprocessor] = None,
+            postprocessor: Optional[Postprocessor] = None,
             output_dir: Optional[str] = None,
             preprocessed_files_dir: Optional[str] = None,
             num_workers: int = 0,
@@ -52,6 +52,8 @@ class ConfLUNetPredictor(BasePredictor):
         with torch.no_grad():
             outputs = sliding_window_inference(img, patch_size, self.batch_size, self.model, mode='gaussian', overlap=0.5)
         print(f"[INFO] Sliding window inference took {time.time() - start:.2f} seconds")
+        if not isinstance(outputs, tuple) and len(outputs) != 3:
+            raise ValueError("The model should output a tuple of 3 tensors")
 
         semantic_pred_proba, heatmap_pred, offsets_pred = outputs
         heatmap_pred = heatmap_pred.half()

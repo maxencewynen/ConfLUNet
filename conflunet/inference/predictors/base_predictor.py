@@ -11,7 +11,7 @@ from monai.config.type_definitions import NdarrayOrTensor
 
 from conflunet.dataloading.dataloaders import get_test_dataloader
 from conflunet.training.utils import get_default_device
-from conflunet.postprocessing.basic_postprocessor import BasicPostprocessor
+from conflunet.postprocessing.basic_postprocessor import Postprocessor
 from conflunet.utilities.planning_and_configuration import PlansManagerInstanceSeg
 
 
@@ -28,18 +28,18 @@ BASE_OUTPUT = {
 }
 
 
-class BasePredictor:
+class Predictor:
     def __init__(
             self,
             plans_manager: PlansManagerInstanceSeg,
             model: torch.nn.Module,
-            postprocessor: Optional[BasicPostprocessor] = None,
+            postprocessor: Optional[Postprocessor] = None,
             output_dir: Optional[str] = None,
             preprocessed_files_dir: Optional[str] = None,
             num_workers: int = 0,
             save_only_instance_segmentation: bool = True
     ):
-        super(BasePredictor, self).__init__()
+        super(Predictor, self).__init__()
         self.plans_manager = plans_manager
         self.configuration = plans_manager.get_configuration('3d_fullres')
         self.n_channels = len(plans_manager.foreground_intensity_properties_per_channel)

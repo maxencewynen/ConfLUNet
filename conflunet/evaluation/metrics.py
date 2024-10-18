@@ -3,12 +3,13 @@ import os
 import pandas as pd
 import numpy as np
 import nibabel as nib
-from conflunet.postprocess import remove_small_lesions_from_instance_segmentation
-from conflunet.evaluation.utils import find_confluent_lesions, intersection_over_union
+
+from conflunet.evaluation.utils import match_instances
+from conflunet.evaluation.utils import find_confluent_lesions
 from conflunet.evaluation.semantic_segmentation import dice_metric, dice_norm_metric
 from conflunet.evaluation.instance_segmentation import panoptic_quality, dice_per_tp
+from conflunet.postprocessing.small_instances_removal import remove_small_lesions_from_instance_segmentation
 from conflunet.evaluation.detection import f_beta_score, recall, precision, pred_lesion_count, ref_lesion_count, DiC
-from conflunet.evaluation.utils import match_instances
 
 
 def compute_metrics(
@@ -63,7 +64,7 @@ def compute_metrics(
             ref_img = nib.load(os.path.join(ref_dir, ref_file))
             voxel_size = ref_img.header.get_zooms()
             ref_img = remove_small_lesions_from_instance_segmentation(ref_img.get_fdata(), voxel_size,
-                                                                      l_min=args.minimum_lesion_size)
+                                                                      minimum_instance_size=args.minimum_lesion_size)
             pred_img = nib.load(pred_file_path).get_fdata()
 
             matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred_img, ref_img)
@@ -73,11 +74,11 @@ def compute_metrics(
 
             ### Compute metrics ###
             # Dice score
-            dsc = dice_metric((ref_img > 0).astype(np.uint8), (pred_img > 0).astype(np.uint8))
+            dsc = dice_metric((pred_img > 0).astype(np.uint8), (ref_img > 0).astype(np.uint8))
             metrics_dict["DSC"].append(dsc)
             
             # normalized Dice score
-            ndsc = dice_norm_metric((ref_img > 0).astype(np.uint8), (pred_img > 0).astype(np.uint8))
+            ndsc = dice_norm_metric((pred_img > 0).astype(np.uint8), (ref_img > 0).astype(np.uint8))
             metrics_dict["nDSC"].append(ndsc)
 
             # PQ

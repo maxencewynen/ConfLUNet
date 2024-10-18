@@ -3,9 +3,12 @@ from typing import Tuple, Callable
 import numpy as np
 import torch
 
+from conflunet.postprocessing.semantic import ConnectedComponentsPostprocessor, ACLSPostprocessor
 from conflunet.training.losses import SemanticSegmentationLoss
 from conflunet.training.trainer import TrainingPipeline
 from conflunet.training.utils import save_patch
+from conflunet.inference.predictors.base_predictor import Predictor
+from conflunet.inference.predictors.semantic import SemanticPredictor
 
 
 class SemanticTrainer(TrainingPipeline):
@@ -47,6 +50,37 @@ class SemanticTrainer(TrainingPipeline):
                          save_predictions=save_predictions,
                          semantic=True)
 
+        self.predictors = [
+            SemanticPredictor(
+                plans_manager=self.plans_manager,
+                model=self.model,
+                postprocessor=ConnectedComponentsPostprocessor(
+                    minimum_instance_size=0,
+                    minimum_size_along_axis=0,
+                    semantic_threshold=0.5,
+                    device=self.device
+                ),
+                output_dir=self.full_validation_save_dir,
+                num_workers=self.num_workers,
+                save_only_instance_segmentation=False
+            ),
+            # Same as above, but with a different postprocessor
+            SemanticPredictor(
+                plans_manager=self.plans_manager,
+                model=self.model,
+                postprocessor=ACLSPostprocessor(
+                    minimum_instance_size=0,
+                    minimum_size_along_axis=0,
+                    semantic_threshold=0.5,
+                    sigma=1.0,
+                    device=self.device
+                ),
+                output_dir=self.full_validation_save_dir,
+                num_workers=self.num_workers,
+                save_only_instance_segmentation=False
+            ),
+        ]
+
     def _edit_name(self) -> None:
         self.model_name = f"SEMANTIC_{self.model_name}"
         if self.debug:
@@ -85,7 +119,7 @@ class SemanticTrainer(TrainingPipeline):
             'Training Segmentation Loss/Focal Loss': 0,
         }
 
-    def initialize_val_metrics(self) -> dict:
+    def initialize_val_logs(self) -> dict:
         return {
             'Validation Loss/Total Loss': 0,
             'Validation Segmentation Loss/Dice Loss': 0,

@@ -5,18 +5,18 @@ from typing import Optional, Dict
 from monai.inferers import sliding_window_inference
 from monai.config.type_definitions import NdarrayOrTensor
 
-from conflunet.inference.predictors.base_predictor import BasePredictor, BASE_OUTPUT
-from conflunet.postprocessing.basic_postprocessor import BasicPostprocessor
+from conflunet.inference.predictors.base_predictor import Predictor, BASE_OUTPUT
+from conflunet.postprocessing.basic_postprocessor import Postprocessor
 from conflunet.postprocessing.semantic import ACLSPostprocessor
 from conflunet.utilities.planning_and_configuration import PlansManagerInstanceSeg
 
 
-class SemanticPredictor(BasePredictor):
+class SemanticPredictor(Predictor):
     def __init__(
             self,
             plans_manager: PlansManagerInstanceSeg,
             model: torch.nn.Module,
-            postprocessor: Optional[BasicPostprocessor] = None,
+            postprocessor: Optional[Postprocessor] = None,
             output_dir: Optional[str] = None,
             preprocessed_files_dir: Optional[str] = None,
             num_workers: int = 0,
@@ -53,6 +53,8 @@ class SemanticPredictor(BasePredictor):
             outputs = sliding_window_inference(img, patch_size, self.batch_size, self.model, mode='gaussian', overlap=0.5)
         print(f"[INFO] Sliding window inference took {time.time() - start:.2f} seconds")
 
+        if isinstance(outputs, tuple):
+            raise ValueError("The model should output a single tensor, not a tuple of tensors")
         semantic_pred_proba = torch.squeeze(self.act(outputs)[0, 1]) * brainmask
 
         del img, outputs
@@ -68,17 +70,17 @@ class SemanticPredictor(BasePredictor):
 
 if __name__ == '__main__':
     from conflunet.utilities.planning_and_configuration import load_dataset_and_configuration
-    from conflunet.architecture.conflunet import ConfLUNet
+    from conflunet.architecture.conflunet import ConfLUNet, UNet3D
     from torch import nn
     import torch
     dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(321)
 
-    model = ConfLUNet(1,2, scale_offsets=20)
-    path_to_model = "/home/mwynen/Downloads/best_DSC_SO_A_L1_e-5_h1200o0.3_S20_seed1.pth"
-    model.load_state_dict(torch.load(path_to_model))
-    # model = UNet3D(1,2)
-    # path_to_model = "/home/mwynen/Downloads/best_DSC_SS_lre-5_seed1.pth"
+    # model = ConfLUNet(1,2, scale_offsets=20)
+    # path_to_model = "/home/mwynen/Downloads/best_DSC_SO_A_L1_e-5_h1200o0.3_S20_seed1.pth"
     # model.load_state_dict(torch.load(path_to_model))
+    model = UNet3D(1,2)
+    path_to_model = "/home/mwynen/Downloads/best_DSC_SS_lre-5_seed1.pth"
+    model.load_state_dict(torch.load(path_to_model))
     # model = DummySemanticProbabilityModel()
     model.eval()
 
@@ -94,5 +96,11 @@ if __name__ == '__main__':
         num_workers=0,
         save_only_instance_segmentation=False
     )
-    p.predict_from_preprocessed_dir()
-    pass
+    # p.predict_from_preprocessed_dir()
+
+    dataloader = p.get_dataloader()
+    predictions_loader = p.get_predictions_loader(dataloader, p.model)
+
+    for data_batch, predicted_batch in zip(dataloader, predictions_loader):
+        break
+

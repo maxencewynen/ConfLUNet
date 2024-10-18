@@ -7,10 +7,10 @@ from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 
 from monai.config.type_definitions import NdarrayOrTensor
 
-from conflunet.postprocessing.basic_postprocessor import BasicPostprocessor
+from conflunet.postprocessing.basic_postprocessor import Postprocessor
 
 
-class ConnectedComponentsPostprocessor(BasicPostprocessor):
+class ConnectedComponentsPostprocessor(Postprocessor):
     def __init__(
             self,
             minimum_instance_size: int = 0,
@@ -40,7 +40,7 @@ class ConnectedComponentsPostprocessor(BasicPostprocessor):
         return output_dict
 
 
-class ACLSPostprocessor(BasicPostprocessor):
+class ACLSPostprocessor(Postprocessor):
     def __init__(
             self,
             minimum_instance_size: int = 0,
