@@ -81,6 +81,12 @@ class SemanticTrainer(TrainingPipeline):
             ),
         ]
 
+        if self.best_metrics is None:
+            self.best_metrics = {
+                predictor.postprocessor.name: {metric: -np.inf for metric in self.metrics_to_track.keys()}
+                for predictor in self.predictors
+            }
+
     def _edit_name(self) -> None:
         self.model_name = f"SEMANTIC_{self.model_name}"
         if self.debug:

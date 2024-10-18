@@ -116,12 +116,6 @@ class TrainingPipeline:
                 "Validation Metrics/Panoptic Quality": (panoptic_quality, False), # False means it needs instance segmentation
             }
 
-        if self.best_metrics is None:
-            self.best_metrics = {
-                predictor.postprocessor.name: {metric: -np.inf for metric in self.metrics_to_track.keys()}
-                for predictor in self.predictors
-            }
-
         self.scaler = torch.cuda.amp.GradScaler()
 
     def get_dataloaders(self) -> Tuple[DataLoader, DataLoader]:
