@@ -8,6 +8,7 @@ from os.path import join as pjoin
 from monai.data import DataLoader
 from nnunetv2.paths import  nnUNet_results
 from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
+from torch.distributed.pipeline.sync.checkpoint import checkpoint
 
 from conflunet.architecture.nnconflunet import *
 from conflunet.architecture.utils import get_model
@@ -113,7 +114,10 @@ class TrainingPipeline:
                 "Validation Metrics/Normalized Dice": (dice_norm_metric, True),
                 "Validation Metrics/Panoptic Quality": (panoptic_quality, False), # False means it needs instance segmentation
             }
-        self.best_metrics = {metric: -np.inf for metric in self.metrics_to_track.keys()}
+        self.best_metrics = {
+            predictor.postprocessor.name: {metric: -np.inf for metric in self.metrics_to_track.keys()}
+            for predictor in self.predictors
+        }
 
         self.scaler = torch.cuda.amp.GradScaler()
 
@@ -296,7 +300,7 @@ class TrainingPipeline:
         start_full_validation_time = time.time()
 
         for predictor in self.predictors:
-            avg_val_metrics = {k: 0 for k in self.best_metrics}
+            avg_val_metrics = {k: 0 for k in self.best_metrics[predictor.postprocessor.name].keys()}
             start_this_predictor = time.time()
             predictions_loader = predictor.get_predictions_loader(self.full_val_loader, self.model)
             for gt, pred in zip(self.full_val_loader, predictions_loader):
@@ -307,11 +311,15 @@ class TrainingPipeline:
             print(f"Full dataset prediction by Predictor {predictor.__class__.__name__} took {time.time() - start_this_predictor:.2f} seconds")
 
             self.average_full_val_metrics(avg_val_metrics)
+            for metric in avg_val_metrics:
+                if avg_val_metrics[metric] > self.best_metrics[predictor.postprocessor.name][metric]:
+                    self.best_metrics[predictor.postprocessor.name][metric] = avg_val_metrics[metric]
+                    checkpoint_filename = f"checkpoint_best_{metric}_{predictor.postprocessor.name}.pth"
+                    self.save_checkpoint(epoch, checkpoint_filename=checkpoint_filename)
 
             if not self.wandb_ignore:
                 wandb.log({k + '_' + predictor.postprocessor.name: v for k, v in avg_val_metrics.items()}, step=epoch)
 
-        
         print(f"Full dataset prediction by all Predictors took {time.time() - start_full_validation_time:.2f} seconds")
 
     def update_metrics(self, avg_val_metrics: dict, gt: dict, pred: dict) -> None:
@@ -354,15 +362,16 @@ class TrainingPipeline:
         for key in avg_val_losses:
             print(f"{key}: {avg_val_losses[key]:.4f}")
 
-    def save_checkpoint(self, epoch: int) -> None:
+    def save_checkpoint(self, epoch: int, checkpoint_filename: str = None) -> None:
         if not self.debug and not self.wandb_ignore:
+            checkpoint_filename = checkpoint_filename or self.checkpoint_filename
             torch.save({
                 'epoch': epoch + 1,
                 'state_dict': self.model.state_dict(),
                 'optimizer': self.optimizer.state_dict(),
                 'wandb_run_id': self.wandb_run_id,
                 'scheduler': self.lr_scheduler.state_dict()
-            }, self.checkpoint_filename)
+            }, checkpoint_filename)
 
     def run_training(self) -> None:
         for epoch in range(self.start_epoch, self.n_epochs):
