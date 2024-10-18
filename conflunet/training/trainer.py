@@ -77,6 +77,7 @@ class TrainingPipeline:
         self.optimizer = None
         self.lr_scheduler = None
         self.start_epoch = None
+        self.best_metrics = None
         self.loss_fn = None
         self.wandb_run_id = None
 
@@ -114,10 +115,12 @@ class TrainingPipeline:
                 "Validation Metrics/Normalized Dice": (dice_norm_metric, True),
                 "Validation Metrics/Panoptic Quality": (panoptic_quality, False), # False means it needs instance segmentation
             }
-        self.best_metrics = {
-            predictor.postprocessor.name: {metric: -np.inf for metric in self.metrics_to_track.keys()}
-            for predictor in self.predictors
-        }
+
+        if self.best_metrics is None:
+            self.best_metrics = {
+                predictor.postprocessor.name: {metric: -np.inf for metric in self.metrics_to_track.keys()}
+                for predictor in self.predictors
+            }
 
         self.scaler = torch.cuda.amp.GradScaler()
 
@@ -167,6 +170,7 @@ class TrainingPipeline:
             self.model.load_state_dict(checkpoint['state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer'])
             self.lr_scheduler.load_state_dict(checkpoint["scheduler"])
+            self.best_metrics = checkpoint["best_metrics"]
 
             if not self.wandb_ignore:
                 self.wandb_run_id = checkpoint['wandb_run_id']
@@ -370,7 +374,8 @@ class TrainingPipeline:
                 'state_dict': self.model.state_dict(),
                 'optimizer': self.optimizer.state_dict(),
                 'wandb_run_id': self.wandb_run_id,
-                'scheduler': self.lr_scheduler.state_dict()
+                'scheduler': self.lr_scheduler.state_dict(),
+                'best_metrics': self.best_metrics
             }, checkpoint_filename)
 
     def run_training(self) -> None:
