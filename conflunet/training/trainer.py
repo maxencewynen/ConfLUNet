@@ -304,28 +304,41 @@ class TrainingPipeline:
                 if self.save_predictions:
                     predictor.save_predictions(pred)
 
-            print(f"Predictor {predictor.__class__.__name__} took {time.time() - start_this_predictor:.2f} seconds")
+            print(f"Full dataset prediction by Predictor {predictor.__class__.__name__} took {time.time() - start_this_predictor:.2f} seconds")
+
+            self.average_full_val_metrics(avg_val_metrics)
 
             if not self.wandb_ignore:
                 wandb.log({k + '_' + predictor.postprocessor.name: v for k, v in avg_val_metrics.items()}, step=epoch)
 
-            self.average_full_val_metrics(avg_val_metrics)
+        
+        print(f"Full dataset prediction by all Predictors took {time.time() - start_full_validation_time:.2f} seconds")
 
     def update_metrics(self, avg_val_metrics: dict, gt: dict, pred: dict) -> None:
         print("[INFO] Computing metrics ...")
-        instance_seg_pred = pred['instance_seg_pred'].detach().cpu().numpy()
-        semantic_pred_binary = pred['semantic_pred_binary'].detach().cpu().numpy()
+        start_metric_computation_time = time.time()
+        instance_seg_pred = np.squeeze(pred['instance_seg_pred'].detach().cpu().numpy())
+        semantic_pred_binary = np.squeeze(pred['semantic_pred_binary'].detach().cpu().numpy())
         gt_instance_seg = np.squeeze(gt['instance_seg'].detach().cpu().numpy())
         gt_semantic = np.squeeze(gt['seg'].detach().cpu().numpy())
-
+        
+        dsc = 0 
         for metric_name, (metric_fn, semantic) in self.metrics_to_track.items():
             if semantic:
-                avg_val_metrics[metric_name] += metric_fn(semantic_pred_binary, gt_semantic)
+                if metric_name == 'Validation Metrics/Dice Score':
+                    dsc = metric_val = metric_fn(semantic_pred_binary, gt_semantic)
+                else:
+                    metric_val = metric_fn(semantic_pred_binary, gt_semantic)
+                avg_val_metrics[metric_name] += metric_val
 
-        if avg_val_metrics['Validation Metrics/Dice Score'] > 0.6: # Only compute panoptic quality if the semantic segmentation is good
+        if dsc > 0.6: # Only compute panoptic quality if the semantic segmentation is good
             for metric_name, (metric_fn, semantic) in self.metrics_to_track.items():
                 if not semantic:
                     avg_val_metrics[metric_name] += metric_fn(instance_seg_pred, gt_instance_seg)
+        else:
+            print(f"[INFO] Skip PQ calculation because the DSC is too low ({dsc:.4f})")
+        
+        print(f"[INFO] Metric computation for this image took {time.time() - start_metric_computation_time:.2f} seconds")
 
     @staticmethod
     def print_val_summary(avg_val_losses: dict, start_validation_time: float, full: bool = False) -> None:

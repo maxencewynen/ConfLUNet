@@ -126,7 +126,7 @@ class ACLSPostprocessor(Postprocessor):
     def _postprocess(self, output_dict: Dict[str, NdarrayOrTensor]) -> Dict[str, NdarrayOrTensor]:
         assert 'semantic_pred_proba' in output_dict.keys(), "output_dict must contain 'semantic_pred_proba'"
         semantic_pred_proba = output_dict['semantic_pred_proba']
-        binary_pred = self._maybe_convert_to_numpy(self.binarize_semantic_probability(semantic_pred_proba))
+        binary_pred = np.squeeze(self._maybe_convert_to_numpy(self.binarize_semantic_probability(semantic_pred_proba)))
         instance_seg_pred = label(binary_pred)[0]
         output_dict['instance_seg_pred'] = self._convert_as(instance_seg_pred, semantic_pred_proba)
         output_dict['semantic_pred_binary'] = self._convert_as(binary_pred, semantic_pred_proba)
@@ -134,7 +134,7 @@ class ACLSPostprocessor(Postprocessor):
         output_dict = self.remove_small_instances(output_dict)
         masked_data = np.where(binary_pred, self._maybe_convert_to_numpy(output_dict['semantic_pred_proba']), 0)
 
-        eigenvalues = self.compute_hessian_eigenvalues(masked_data)
+        eigenvalues = self.compute_hessian_eigenvalues(np.squeeze(masked_data))
         instance_centers_mask = np.all(eigenvalues < 0, axis=0)
 
         instance_centers_clusters, n_clusters = label(instance_centers_mask)
@@ -142,7 +142,7 @@ class ACLSPostprocessor(Postprocessor):
         # Identify unlabelled voxels in binary image and assign nearest instance labels
         unlabelled_voxels = np.logical_and(binary_pred == 1, instance_centers_clusters == 0)
         unlabelled_voxels_indices = np.transpose(np.where(unlabelled_voxels))
-
+        
         if len(unlabelled_voxels_indices) > 0:
             instance_seg_pred = self.find_nearest_instance_labels(unlabelled_voxels_indices, instance_centers_clusters)
 
