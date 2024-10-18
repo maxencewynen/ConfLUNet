@@ -192,7 +192,7 @@ class TrainingPipeline:
             self.optimizer_step(total_loss)
 
             if self.debug and epoch == 0 and batch_idx == 0:
-                self.save_train_patch_debug(batch_data, model_outputs, epoch)
+                self.save_train_patch_debug((img, outputs), model_outputs, epoch)
 
             self.print_batch_progress(batch_idx, total_loss, start_batch_time)
 
@@ -260,7 +260,7 @@ class TrainingPipeline:
                 self.update_loss_values(avg_val_losses, loss_values)
 
                 if self.debug and batch_idx == 0:
-                    self.save_val_patch_debug(batch_data, model_outputs, epoch)
+                    self.save_val_patch_debug((img, outputs), model_outputs, epoch)
 
             self.average_val_logs(avg_val_losses)
 
