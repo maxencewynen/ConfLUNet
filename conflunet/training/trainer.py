@@ -333,8 +333,13 @@ class TrainingPipeline:
 
         if dsc > 0.6: # Only compute panoptic quality if the semantic segmentation is good
             for metric_name, (metric_fn, semantic) in self.metrics_to_track.items():
-                if not semantic:
-                    avg_val_metrics[metric_name] += metric_fn(instance_seg_pred, gt_instance_seg)
+                if semantic:
+                    continue
+                if metric_name == 'Validation Metrics/Panoptic Quality':
+                    metric = metric_fn(instance_seg_pred, gt_instance_seg, compute_through=False)
+                else:
+                    metric = metric_fn(instance_seg_pred, gt_instance_seg)
+                avg_val_metrics[metric_name] += metric
         else:
             print(f"[INFO] Skip PQ calculation because the DSC is too low ({dsc:.4f})")
         

@@ -29,7 +29,7 @@ def dice_per_tp(pred: np.ndarray, ref: np.ndarray, matched_pairs: list):
 
 
 def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = None, unmatched_pred: list = None,
-                     unmatched_ref: list = None):
+                     unmatched_ref: list = None, compute_through: bool = True):
     """
     Compute the Panoptic Quality (PQ) metric to compare predicted and reference instance segmentation.
     In this version of the function, we are not considering the background.
@@ -40,10 +40,19 @@ def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = No
                         If None, computes it. Defaults to None.
         unmatched_pred: list of unmatched predicted instance ids. If None, computes it. Defaults to None.
         unmatched_ref: list of unmatched ground truth instance ids. If None, computes it. Defaults to None.
+        compute_through: bool, whether to compute the metric even if the prediction contains too many instances.
     Returns:
         float: Panoptic Quality (PQ) metric.
     """
     assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+
+    if not compute_through:
+        pred_counts = len(np.unique(pred))
+        ref_counts = len(np.unique(ref))
+        if pred_counts > 2*ref_counts and pred_counts > 75:
+            print(f"Too many instances in prediction: {pred_counts} (ref number of instances: {ref_counts})."
+                   "Skipping computation and returning 0.0.")
+            return 0.0
 
     if matched_pairs is None or unmatched_pred is None or unmatched_ref is None:
         matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)
