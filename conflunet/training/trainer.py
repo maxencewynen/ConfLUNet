@@ -1,9 +1,13 @@
 import os
 import time
+from typing import Callable
+
+import torch
 import wandb
 import warnings
 from os.path import join as pjoin
 
+from monai.data import DataLoader
 from nnunetv2.paths import  nnUNet_results
 from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
 
@@ -100,7 +104,7 @@ class TrainingPipeline:
 
         self.scaler = torch.cuda.amp.GradScaler()
 
-    def get_dataloaders(self):
+    def get_dataloaders(self) -> Tuple[DataLoader, DataLoader]:
         train_loader = get_train_dataloader_from_dataset_id_and_fold(self.dataset_id, self.fold,
                                                                      num_workers=self.num_workers,
                                                                      cache_rate=self.cache_rate,
@@ -116,11 +120,11 @@ class TrainingPipeline:
                                                                      seed_val=self.seed_val)
         return train_loader, val_loader
 
-    def _edit_name(self):
+    def _edit_name(self) -> None:
         if self.debug:
             self.model_name = f"DEBUG_{self.model_name}"
 
-    def setup_save_dir(self):
+    def setup_save_dir(self) -> None:
         self.save_dir = pjoin(nnUNet_results, self.dataset_name, self.model_name, 'fold_%d' % self.fold)
         os.makedirs(self.save_dir, exist_ok=True)
 
@@ -128,7 +132,7 @@ class TrainingPipeline:
             self.patches_save_dir = pjoin(self.save_dir, 'saved_patches')
             os.makedirs(self.patches_save_dir, exist_ok=True)
 
-    def set_model_optimizer_and_scheduler(self,) -> Tuple[nn.Module, torch.optim.Optimizer, object, int, str]:
+    def set_model_optimizer_and_scheduler(self) -> Tuple[nn.Module, torch.optim.Optimizer, object, int, str]:
         self.wandb_run_id = None
         self.model = get_model(self.configuration, self.n_channels, self.semantic).to(self.device)
 
@@ -155,19 +159,19 @@ class TrainingPipeline:
             wandb.init(project=self.wandb_project, mode="online", name=self.model_name)
             self.wandb_run_id = wandb.run.id
 
-    def get_loss_functions(self):
+    def get_loss_functions(self) -> Callable:
         raise NotImplementedError("Subclass must implement this method")
 
-    def compute_loss(self, model_outputs, outputs):
+    def compute_loss(self, model_outputs: Tuple[torch.Tensor], outputs: Tuple[torch.Tensor]) -> Tuple[torch.Tensor, ...]:
         raise NotImplementedError("Subclass must implement this method")
 
-    def save_train_patch_debug(self, batch_inputs, model_outputs, epoch):
+    def save_train_patch_debug(self, batch_inputs: Tuple[torch.Tensor, ...], model_outputs: torch.Tensor | Tuple[torch.Tensor, ...], epoch: int) -> None:
         raise NotImplementedError("Subclass must implement this method")
 
-    def save_val_patch_debug(self, batch_inputs, model_outputs, epoch):
+    def save_val_patch_debug(self, batch_inputs: Tuple[torch.Tensor, ...], model_outputs: torch.Tensor | Tuple[torch.Tensor, ...], epoch: int) -> None:
         raise NotImplementedError("Subclass must implement this method")
 
-    def train_epoch(self, epoch):
+    def train_epoch(self, epoch: int) -> None:
         self.model.train()
         epoch_logs = self.initialize_epoch_logs()
         start_epoch_time = time.time()
@@ -199,48 +203,49 @@ class TrainingPipeline:
         if not self.wandb_ignore:
             wandb.log({**epoch_logs, **{'Learning rate': self.optimizer.param_groups[0]['lr']}}, step=epoch)
 
-    def initialize_epoch_logs(self):
+    def initialize_epoch_logs(self) -> dict:
         raise NotImplementedError
 
-    def initialize_val_metrics(self):
+    def initialize_val_metrics(self) -> dict:
         raise NotImplementedError
 
-    def average_epoch_logs(self, epoch_logs):
+    def average_epoch_logs(self, epoch_logs: dict) -> None:
         for key in epoch_logs:
             epoch_logs[key] /= len(self.train_loader)
 
-    def average_val_logs(self, val_logs):
+    def average_val_logs(self, val_logs: dict) -> None:
         for key in val_logs:
             val_logs[key] /= len(self.val_loader)
 
-    def prepare_batch(self, batch_data):
+    def prepare_batch(self, batch_data: dict) -> Tuple[torch.Tensor, torch.Tensor | Tuple[torch.Tensor, ...]]:
         raise NotImplementedError("Subclass must implement this method")
 
     @staticmethod
-    def update_loss_values(epoch_loss_values, loss_values):
+    def update_loss_values(epoch_loss_values: dict, loss_values: Tuple[torch.Tensor, ...]) -> None:
+        assert len(epoch_loss_values) == len(loss_values), "Loss values must have the same length as the epoch loss values"
         for key, loss in zip(epoch_loss_values.keys(), loss_values):
             epoch_loss_values[key] += loss.item()
 
-    def optimizer_step(self, loss):
+    def optimizer_step(self, loss: torch.Tensor) -> None:
         self.scaler.scale(loss).backward()
         self.scaler.step(self.optimizer)
         self.scaler.update()
         self.optimizer.zero_grad()
 
-    def print_batch_progress(self, batch_idx, loss, start_batch_time):
+    def print_batch_progress(self, batch_idx: int, loss: torch.Tensor, start_batch_time: float) -> None:
         elapsed_time = time.time() - start_batch_time
         print(f"Batch {batch_idx + 1}/{len(self.train_loader)}, train_loss: {loss.item():.4f} "
               f"(elapsed time: {int(elapsed_time // 60)}min {int(elapsed_time % 60)}s)")
 
     @staticmethod
-    def print_epoch_summary(epoch_loss_values, start_epoch_time, epoch):
+    def print_epoch_summary(epoch_loss_values: dict, start_epoch_time: float, epoch: int) -> None:
         elapsed_epoch_time = time.time() - start_epoch_time
         print(f"Epoch {epoch + 1} took {int(elapsed_epoch_time // 60)}min {int(elapsed_epoch_time % 60)}s")
         print(f"Epoch average loss: {epoch_loss_values['Training Loss/Total Loss']:.4f}")
 
-    def validate_epoch(self, epoch):
+    def validate_epoch(self, epoch: int) -> None:
         self.model.eval()
-        avg_val_metrics = self.initialize_val_metrics()
+        avg_val_losses = self.initialize_val_metrics()
         start_validation_time = time.time()
         with torch.no_grad():
             for batch_idx, batch_data in enumerate(self.val_loader):
@@ -252,24 +257,29 @@ class TrainingPipeline:
                 loss_values = self.compute_loss(model_outputs, outputs)
 
                 # Update the loss values for logging
-                self.update_loss_values(avg_val_metrics, loss_values)
+                self.update_loss_values(avg_val_losses, loss_values)
 
                 if self.debug and batch_idx == 0:
                     self.save_val_patch_debug(batch_data, model_outputs, epoch)
 
-            self.average_val_logs(avg_val_metrics)
+            self.average_val_logs(avg_val_losses)
 
             if not self.wandb_ignore:
-                wandb.log(avg_val_metrics, step=epoch)
+                wandb.log(avg_val_losses, step=epoch)
+
+            self.print_val_summary(avg_val_losses, start_validation_time)
+
+    def full_validation(self, epoch: int) -> None:
+        raise NotImplementedError("Subclass must implement this method")
 
     @staticmethod
-    def print_val_summary(avg_val_metrics, start_validation_time):
+    def print_val_summary(avg_val_losses: dict, start_validation_time: float) -> None:
         val_elapsed_time = time.time() - start_validation_time
         print(f"Validation took {int(val_elapsed_time // 60)}min {int(val_elapsed_time % 60)}s")
-        for key in avg_val_metrics:
-            print(f"{key}: {avg_val_metrics[key]:.4f}")
+        for key in avg_val_losses:
+            print(f"{key}: {avg_val_losses[key]:.4f}")
 
-    def save_checkpoint(self, epoch):
+    def save_checkpoint(self, epoch: int) -> None:
         if not self.debug and not self.wandb_ignore:
             torch.save({
                 'epoch': epoch + 1,
@@ -279,7 +289,7 @@ class TrainingPipeline:
                 'scheduler': self.lr_scheduler.state_dict()
             }, self.checkpoint_filename)
 
-    def run_training(self):
+    def run_training(self) -> None:
         for epoch in range(self.start_epoch, self.n_epochs):
             print("-" * 10, f"\nEpoch {epoch + 1}/{self.n_epochs}")
             self.train_epoch(epoch)
@@ -289,7 +299,7 @@ class TrainingPipeline:
 
             self.lr_scheduler.step()
 
-            # if (epoch + 1) % self.actual_val_interval == 0:
-            #     self.full_validation(epoch)
+            if (epoch + 1) % self.actual_val_interval == 0:
+                self.full_validation(epoch)
 
             self.save_checkpoint(epoch)

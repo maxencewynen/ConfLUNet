@@ -1,3 +1,5 @@
+from typing import Tuple, Callable
+
 import numpy as np
 import torch
 
@@ -45,40 +47,43 @@ class SemanticTrainer(TrainingPipeline):
                          save_predictions=save_predictions,
                          semantic=True)
 
-    def _edit_name(self):
+    def _edit_name(self) -> None:
         self.model_name = f"SEMANTIC_{self.model_name}"
         if self.debug:
             self.model_name = f"DEBUG_{self.model_name}"
 
-    def prepare_batch(self, batch_data):
+    def prepare_batch(self, batch_data: dict) -> Tuple[torch.Tensor, torch.Tensor]:
         inputs = batch_data["img"].to(self.device)
         labels = batch_data["seg"].type(torch.LongTensor).to(self.device)
         return inputs, labels
 
-    def get_loss_functions(self):
+    def get_loss_functions(self) -> Callable:
         return SemanticSegmentationLoss(dice_loss_weight=self.dice_loss_weight,
                                         focal_loss_weight=self.focal_loss_weight)
 
-    def compute_loss(self, model_outputs, outputs):
+    def compute_loss(self, model_outputs: Tuple[torch.Tensor], outputs: Tuple[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.loss_fn(model_outputs, outputs)
 
-    def save_train_patch_debug(self, batch_inputs, model_outputs, epoch):
-        save_patch(batch_inputs[0].cpu().numpy(), f'Epoch-{epoch}_train_image', self.patches_save_dir)
-        save_patch(batch_inputs[1].cpu().numpy().astype(np.int16), f'Epoch-{epoch}_train_labels', self.patches_save_dir)
+    def save_train_patch_debug(self, batch_inputs: Tuple[torch.Tensor, ...], model_outputs: torch.Tensor | Tuple[torch.Tensor, ...], epoch: int) -> None:
+        img, labels = batch_inputs
+        semantic_pred = model_outputs
+        save_patch(img.cpu().numpy(), f'Epoch-{epoch}_train_image', self.patches_save_dir)
+        save_patch(labels.cpu().numpy().astype(np.int16), f'Epoch-{epoch}_train_labels', self.patches_save_dir)
+        save_patch(semantic_pred.detach().cpu().numpy().astype(np.int16), f'Epoch-{epoch}_trainpred_labels', self.patches_save_dir)
 
-    def save_val_patch_debug(self, batch_inputs, model_outputs, epoch):
+    def save_val_patch_debug(self, batch_inputs: Tuple[torch.Tensor, ...], model_outputs: torch.Tensor | Tuple[torch.Tensor, ...], epoch: int) -> None:
         save_patch(batch_inputs[0].cpu().numpy(), f'Epoch-{epoch}_val_image', self.patches_save_dir)
         save_patch(batch_inputs[1].cpu().numpy(), f'Epoch-{epoch}_val_labels', self.patches_save_dir)
         save_patch(model_outputs[0], f"Epoch-{epoch}_pred_segmentation_proba", self.patches_save_dir)
 
-    def initialize_epoch_logs(self):
+    def initialize_epoch_logs(self) -> dict:
         return {
             'Training Loss/Total Loss': 0,
             'Training Segmentation Loss/Dice Loss': 0,
             'Training Segmentation Loss/Focal Loss': 0,
         }
 
-    def initialize_val_metrics(self):
+    def initialize_val_metrics(self) -> dict:
         return {
             'Validation Loss/Total Loss': 0,
             'Validation Segmentation Loss/Dice Loss': 0,
