@@ -69,14 +69,14 @@ class SemanticTrainer(TrainingPipeline):
         semantic_pred = model_outputs[0, 1, :, :, :]
         save_patch(img.detach().cpu().numpy(), f'Epoch-{epoch}_train_image', self.patches_save_dir)
         save_patch(labels.detach().cpu().numpy().astype(np.int16), f'Epoch-{epoch}_train_labels', self.patches_save_dir)
-        save_patch(semantic_pred.detach().cpu().numpy().astype(np.int16), f'Epoch-{epoch}_trainpred_labels', self.patches_save_dir)
+        save_patch(semantic_pred.detach().cpu().numpy().astype(np.int16), f'Epoch-{epoch}_train_pred_segmentation_proba', self.patches_save_dir)
 
     def save_val_patch_debug(self, batch_inputs: Tuple[torch.Tensor, ...], model_outputs: torch.Tensor | Tuple[torch.Tensor, ...], epoch: int) -> None:
         img, labels = batch_inputs
         semantic_pred = model_outputs[0, 1, :, :, :]
         save_patch(img.cpu().numpy(), f'Epoch-{epoch}_val_image', self.patches_save_dir)
         save_patch(labels.cpu().numpy().astype(np.int16), f'Epoch-{epoch}_val_labels', self.patches_save_dir)
-        save_patch(semantic_pred.cpu().numpy(), f"Epoch-{epoch}_pred_segmentation_proba", self.patches_save_dir)
+        save_patch(semantic_pred.cpu().numpy(), f"Epoch-{epoch}_val_pred_segmentation_proba", self.patches_save_dir)
 
     def initialize_epoch_logs(self) -> dict:
         return {
