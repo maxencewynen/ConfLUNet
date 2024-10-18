@@ -46,7 +46,7 @@ class TrainingPipeline:
                  weight_decay=3e-5,
                  momentum=0.99,
                  semantic: bool = False,
-                 predictors: List[Predictor, ...] = None,
+                 predictors: List[Predictor] = None,
                  metrics_to_track: Dict[str, Tuple[Callable, bool]] = None
                  ):
         self.dataset_id = dataset_id
@@ -177,13 +177,13 @@ class TrainingPipeline:
     def get_loss_functions(self) -> Callable:
         raise NotImplementedError("Subclass must implement this method")
 
-    def compute_loss(self, model_outputs: Tuple[torch.Tensor], outputs: Tuple[torch.Tensor]) -> Tuple[torch.Tensor, ...]:
+    def compute_loss(self, model_outputs: Tuple[torch.Tensor], outputs: Tuple[torch.Tensor]) -> Tuple[torch.Tensor]:
         raise NotImplementedError("Subclass must implement this method")
 
-    def save_train_patch_debug(self, batch_inputs: Tuple[torch.Tensor, ...], model_outputs: torch.Tensor | Tuple[torch.Tensor, ...], epoch: int) -> None:
+    def save_train_patch_debug(self, batch_inputs: Tuple[torch.Tensor], model_outputs: torch.Tensor | Tuple[torch.Tensor], epoch: int) -> None:
         raise NotImplementedError("Subclass must implement this method")
 
-    def save_val_patch_debug(self, batch_inputs: Tuple[torch.Tensor, ...], model_outputs: torch.Tensor | Tuple[torch.Tensor, ...], epoch: int) -> None:
+    def save_val_patch_debug(self, batch_inputs: Tuple[torch.Tensor], model_outputs: torch.Tensor | Tuple[torch.Tensor], epoch: int) -> None:
         raise NotImplementedError("Subclass must implement this method")
 
     def train_epoch(self, epoch: int) -> None:
@@ -236,11 +236,11 @@ class TrainingPipeline:
         for key in val_metrics:
             val_metrics[key] /= len(self.full_val_loader)
 
-    def prepare_batch(self, batch_data: dict) -> Tuple[torch.Tensor, torch.Tensor | Tuple[torch.Tensor, ...]]:
+    def prepare_batch(self, batch_data: dict) -> Tuple[torch.Tensor, torch.Tensor | Tuple[torch.Tensor]]:
         raise NotImplementedError("Subclass must implement this method")
 
     @staticmethod
-    def update_loss_values(epoch_loss_values: dict, loss_values: Tuple[torch.Tensor, ...]) -> None:
+    def update_loss_values(epoch_loss_values: dict, loss_values: Tuple[torch.Tensor]) -> None:
         assert len(epoch_loss_values) == len(loss_values), "Loss values must have the same length as the epoch loss values"
         for key, loss in zip(epoch_loss_values.keys(), loss_values):
             epoch_loss_values[key] += loss.item()
