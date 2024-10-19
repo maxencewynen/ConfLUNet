@@ -312,7 +312,8 @@ class TrainingPipeline:
             for metric in avg_val_metrics:
                 if avg_val_metrics[metric] > self.best_metrics[predictor.postprocessor.name][metric]:
                     self.best_metrics[predictor.postprocessor.name][metric] = avg_val_metrics[metric]
-                    checkpoint_filename = os.path.join(self.save_dir, f"checkpoint_best_{metric}_{predictor.postprocessor.name}.pth")
+                    m = metric.replace("Validation Metrics/", "").replace(" ", "_")
+                    checkpoint_filename = os.path.join(self.save_dir, f"checkpoint_best_{m}_{predictor.postprocessor.name}.pth")
                     self.save_checkpoint(epoch, checkpoint_filename=checkpoint_filename)
 
             if not self.wandb_ignore:
