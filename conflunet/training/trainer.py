@@ -8,7 +8,6 @@ from os.path import join as pjoin
 from monai.data import DataLoader
 from nnunetv2.paths import  nnUNet_results
 from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
-from torch.distributed.pipeline.sync.checkpoint import checkpoint
 
 from conflunet.architecture.nnconflunet import *
 from conflunet.architecture.utils import get_model
@@ -20,7 +19,7 @@ from conflunet.dataloading.dataloaders import (
     get_train_dataloader_from_dataset_id_and_fold,
     get_val_dataloader_from_dataset_id_and_fold,
     get_full_val_dataloader_from_dataset_id_and_fold)
-from conflunet.training.utils import get_default_device
+from conflunet.training.utils import get_default_device, seed_everything
 
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
 
@@ -81,6 +80,7 @@ class TrainingPipeline:
         self.loss_fn = None
         self.wandb_run_id = None
 
+        seed_everything(self.seed_val)
         self.device = get_default_device()
         torch.multiprocessing.set_sharing_strategy('file_system')
 
