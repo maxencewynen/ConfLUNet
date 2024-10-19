@@ -119,11 +119,6 @@ class ConfLUNetPostprocessor(Postprocessor):
                     A Tensor of shape [1, H, W, D] with instance ids for every voxel in the image.
                     A Tensor of shape [H, W, D] with the number of votes each voxel got.
         """
-        assert offsets.size(0) == 1, 'Only supports inference for batch size = 1'
-        assert len(ctr.size()) == 2, 'Center points should have 2 dimensions'
-        assert len(offsets.size()) == 5, 'Offsets should have 5 dimensions'
-        assert ctr.size(0) == 0 or ctr.size(1) == 3, 'Center points should have 3 coordinates'
-
         offsets = offsets.squeeze(0)
         depth, height, width = offsets.size()[1:]
 
@@ -215,12 +210,8 @@ class ConfLUNetPostprocessor(Postprocessor):
         return offsets
 
     def _postprocess(self, output_dict: Dict[str, NdarrayOrTensor]) -> Dict[str, NdarrayOrTensor]:
-        assert 'semantic_pred_proba' in output_dict.keys(), "output_dict must contain 'semantic_pred_proba'"
-        assert 'center_pred' in output_dict.keys(), "output_dict must contain 'heatmap'"
-        assert 'offsets_pred' in output_dict.keys(), "output_dict must contain 'offsets_pred'"
-        
         semantic_pred_proba = output_dict['semantic_pred_proba']
-        binary_pred = self._maybe_convert_to_numpy(self.binarize_semantic_probability(semantic_pred_proba))
+        binary_pred = np.squeeze(self._maybe_convert_to_numpy(self.binarize_semantic_probability(semantic_pred_proba)))
         instance_seg_pred = label(binary_pred)[0]
         output_dict['instance_seg_pred'] = self._convert_as(instance_seg_pred, semantic_pred_proba)
         output_dict['semantic_pred_binary'] = self._convert_as(binary_pred, semantic_pred_proba)
