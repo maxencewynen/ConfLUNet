@@ -62,7 +62,7 @@ class ConfLUNetTrainer(TrainingPipeline):
                          force_restart=force_restart,
                          debug=debug,
                          save_predictions=save_predictions,
-                         semantic=True)
+                         semantic=False)
 
         self.predictors = ConfLUNetPredictor(
             plans_manager=self.plans_manager,
