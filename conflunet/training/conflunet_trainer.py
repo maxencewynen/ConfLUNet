@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from typing import Tuple, Callable
+from torch.nn import SmoothL1Loss, L1Loss
 
 from conflunet.postprocessing.instance import ConfLUNetPostprocessor
 from conflunet.training.losses import ConfLUNetLoss, SemanticSegmentationLoss
@@ -22,6 +23,7 @@ class ConfLUNetTrainer(TrainingPipeline):
                  seg_loss_weight: float = 1.0,
                  heatmap_loss_weight: float = 1.0,
                  offsets_loss_weight: float = 1.0,
+                 offsets_loss: str = "l1",
                  seed: int = 1,
                  val_interval: int = 5,
                  actual_val_interval: int = 50,
@@ -54,6 +56,13 @@ class ConfLUNetTrainer(TrainingPipeline):
         self.seg_loss_weight = seg_loss_weight
         self.heatmap_loss_weight = heatmap_loss_weight
         self.offsets_loss_weight = offsets_loss_weight
+        if offsets_loss == "sl1":
+            self.offsets_loss = SmoothL1Loss(reduction='none')
+        elif offsets_loss == "l1":
+            self.offsets_loss = L1Loss(reduction='none')
+        else:
+            raise ValueError(f"Offsets loss {self.offsets_loss} not recognized. "
+                             f"Choose between 'sl1' and 'l1'.")
 
         self.predictors = ConfLUNetPredictor(
             plans_manager=self.plans_manager,
@@ -97,6 +106,7 @@ class ConfLUNetTrainer(TrainingPipeline):
                 dice_loss_weight=self.dice_loss_weight,
                 focal_loss_weight=self.focal_loss_weight
             ),
+            loss_function_offsets=self.offsets_loss,
         )
 
     def compute_loss(self, model_outputs: Tuple[torch.Tensor], outputs: Tuple[torch.Tensor]) -> Tuple[
