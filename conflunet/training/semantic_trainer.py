@@ -7,7 +7,6 @@ from conflunet.postprocessing.semantic import ConnectedComponentsPostprocessor, 
 from conflunet.training.losses import SemanticSegmentationLoss
 from conflunet.training.trainer import TrainingPipeline
 from conflunet.training.utils import save_patch
-from conflunet.inference.predictors.base_predictor import Predictor
 from conflunet.inference.predictors.semantic import SemanticPredictor
 
 
