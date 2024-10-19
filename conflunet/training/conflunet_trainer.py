@@ -34,6 +34,17 @@ class ConfLUNetTrainer(TrainingPipeline):
                  debug: bool = False,
                  save_predictions: bool = False,
                  ):
+        self.seg_loss_weight = seg_loss_weight
+        self.heatmap_loss_weight = heatmap_loss_weight
+        self.offsets_loss_weight = offsets_loss_weight
+        if offsets_loss == "sl1":
+            self.offsets_loss = SmoothL1Loss(reduction='none')
+        elif offsets_loss == "l1":
+            self.offsets_loss = L1Loss(reduction='none')
+        else:
+            raise ValueError(f"Offsets loss {self.offsets_loss} not recognized. "
+                             f"Choose between 'sl1' and 'l1'.")
+
         super().__init__(dataset_id=dataset_id,
                          fold=fold,
                          num_workers=num_workers,
@@ -52,17 +63,6 @@ class ConfLUNetTrainer(TrainingPipeline):
                          debug=debug,
                          save_predictions=save_predictions,
                          semantic=True)
-
-        self.seg_loss_weight = seg_loss_weight
-        self.heatmap_loss_weight = heatmap_loss_weight
-        self.offsets_loss_weight = offsets_loss_weight
-        if offsets_loss == "sl1":
-            self.offsets_loss = SmoothL1Loss(reduction='none')
-        elif offsets_loss == "l1":
-            self.offsets_loss = L1Loss(reduction='none')
-        else:
-            raise ValueError(f"Offsets loss {self.offsets_loss} not recognized. "
-                             f"Choose between 'sl1' and 'l1'.")
 
         self.predictors = ConfLUNetPredictor(
             plans_manager=self.plans_manager,
