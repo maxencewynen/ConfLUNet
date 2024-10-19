@@ -328,27 +328,12 @@ class TrainingPipeline:
         gt_instance_seg = np.squeeze(gt['instance_seg'].detach().cpu().numpy())
         gt_semantic = np.squeeze(gt['seg'].detach().cpu().numpy())
         
-        dsc = 0 
         for metric_name, (metric_fn, semantic) in self.metrics_to_track.items():
             if semantic:
-                if metric_name == 'Validation Metrics/Dice Score':
-                    dsc = metric_val = metric_fn(semantic_pred_binary, gt_semantic)
-                else:
-                    metric_val = metric_fn(semantic_pred_binary, gt_semantic)
-                avg_val_metrics[metric_name] += metric_val
+                avg_val_metrics[metric_name] += metric_fn(semantic_pred_binary, gt_semantic)
+            else:
+                avg_val_metrics[metric_name] += metric_fn(instance_seg_pred, gt_instance_seg)
 
-        if dsc > 0.6: # Only compute panoptic quality if the semantic segmentation is good
-            for metric_name, (metric_fn, semantic) in self.metrics_to_track.items():
-                if semantic:
-                    continue
-                if metric_name == 'Validation Metrics/Panoptic Quality':
-                    metric = metric_fn(instance_seg_pred, gt_instance_seg, compute_through=False)
-                else:
-                    metric = metric_fn(instance_seg_pred, gt_instance_seg)
-                avg_val_metrics[metric_name] += metric
-        else:
-            print(f"[INFO] Skip PQ calculation because the DSC is too low ({dsc:.4f})")
-        
         print(f"[INFO] Metric computation for this image took {time.time() - start_metric_computation_time:.2f} seconds")
 
     @staticmethod

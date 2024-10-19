@@ -13,8 +13,8 @@ def intersection_over_union(pred_mask: np.ndarray, ref_mask: np.ndarray) -> floa
         float: Intersection over Union (IoU) score between the predicted mask and the reference mask.
     """
     assert pred_mask.shape == ref_mask.shape, "Shapes of pred_mask and ref_mask do not match."
-    assert set(np.unique(pred_mask)).issubset({0,1}), "pred_mask should be binary."
-    assert set(np.unique(ref_mask)).issubset({0,1}), "ref_mask should be binary."
+    # assert set(np.unique(pred_mask)).issubset({0,1}), "pred_mask should be binary."
+    # assert set(np.unique(ref_mask)).issubset({0,1}), "ref_mask should be binary."
     intersection = np.logical_and(pred_mask, ref_mask).sum()
     union = np.logical_or(pred_mask, ref_mask).sum()
     return intersection / union if union != 0 else 0
@@ -52,7 +52,8 @@ def find_confluent_lesions(instance_segmentation):
 
 def match_instances(pred: np.ndarray, ref: np.ndarray, threshold: float = 0.1):
     """
-    Match predicted instances to ground truth instances based on Intersection over Union (IoU) threshold.
+    Match predicted instances to ground truth instances based on Intersection over Union (IoU) threshold. If multiple
+    instances are matched to the same ground truth instance, the pair with the highest IoU is kept.
     Args:
         pred: numpy.ndarray, instance segmentation mask of predicted instances. Shape [H, W, D].
         ref: numpy.ndarray, instance segmentation mask of ground truth instances. Shape [H, W, D].
@@ -70,15 +71,18 @@ def match_instances(pred: np.ndarray, ref: np.ndarray, threshold: float = 0.1):
     matched_pairs = []
     unmatched_pred = []
     unmatched_ref = []
+    unique_refs = np.unique(ref)
 
     for pred_id in np.unique(pred):
         if pred_id == 0:  # skip background
             continue
         pred_mask = pred == pred_id
 
+        unique_refs_to_check = np.unique(ref[pred_mask])
+
         max_iou = -np.inf
         matched_ref_id = None
-        for ref_id in np.unique(ref):
+        for ref_id in unique_refs_to_check:
             if ref_id == 0:  # skip background
                 continue
             ref_mask = ref == ref_id
@@ -87,13 +91,15 @@ def match_instances(pred: np.ndarray, ref: np.ndarray, threshold: float = 0.1):
             if iou > max_iou:
                 max_iou = iou
                 matched_ref_id = ref_id
+            if max_iou == 1:
+                break  # perfect match found
 
         if max_iou > threshold:
             matched_pairs.append((pred_id, matched_ref_id))
         else:
             unmatched_pred.append(pred_id)
 
-    for ref_id in np.unique(ref):
+    for ref_id in unique_refs:
         if ref_id == 0 or ref_id in [x[1] for x in matched_pairs]:
             continue
         unmatched_ref.append(ref_id)

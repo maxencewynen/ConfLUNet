@@ -46,14 +46,6 @@ def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = No
     """
     assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
 
-    if not compute_through:
-        pred_counts = len(np.unique(pred))
-        ref_counts = len(np.unique(ref))
-        if pred_counts > 2*ref_counts and pred_counts > 75:
-            print(f"Too many instances in prediction: {pred_counts} (ref number of instances: {ref_counts})."
-                   "Skipping computation and returning 0.0.")
-            return 0.0
-
     if matched_pairs is None or unmatched_pred is None or unmatched_ref is None:
         matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)
 
