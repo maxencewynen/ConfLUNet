@@ -2,6 +2,7 @@ import argparse
 import warnings
 
 from conflunet.training.semantic_trainer import SemanticTrainer
+from conflunet.training.conflunet_trainer import ConfLUNetTrainer
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
 
 if __name__ == '__main__':
@@ -39,6 +40,9 @@ if __name__ == '__main__':
         kwargs['wandb_project'] = "ConfLUNet_Semantic"
         trainer = SemanticTrainer(**vars(args))
     else:
-        raise NotImplementedError("Only semantic training is supported at the moment")
+        kwargs = vars(args)
+        del kwargs['semantic']
+        kwargs['wandb_project'] = "ConfLUNet"
+        trainer = ConfLUNetTrainer(**vars(args))
 
     trainer.run_training()

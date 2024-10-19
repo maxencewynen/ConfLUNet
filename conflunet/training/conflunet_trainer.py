@@ -9,7 +9,7 @@ from conflunet.training.utils import save_patch
 from conflunet.inference.predictors.instance import ConfLUNetPredictor
 
 
-class SemanticTrainer(TrainingPipeline):
+class ConfLUNetTrainer(TrainingPipeline):
     def __init__(self,
                  dataset_id: int = 321,
                  fold: int = 0,
