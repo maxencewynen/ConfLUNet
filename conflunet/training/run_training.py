@@ -17,6 +17,7 @@ if __name__ == '__main__':
     parser.add_argument('--cache_rate', default=0, type=float)
     parser.add_argument('--dice_loss_weight', type=float, default=0.5, help='Specify the weight of the dice loss')
     parser.add_argument('--focal_loss_weight', type=float, default=1, help='Specify the weight of the focal loss')
+    parser.add_argument('--seg_loss_weight', type=float, default=1, help='Specify the weight of the segmentation loss')
     parser.add_argument('--heatmap_loss_weight', type=float, default=1, help='Specify the weight of the heatmap loss')
     parser.add_argument('--offsets_loss_weight', type=float, default=1, help='Specify the weight of the offsets loss')
     parser.add_argument('--offsets_loss', type=str, default="l1", help="Specify the loss used for the offsets. ('sl1' or 'l1')")
@@ -34,7 +35,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.semantic:
         kwargs = vars(args)
-        del kwargs['heatmap_loss_weight'], kwargs['offsets_loss_weight'], kwargs['offsets_loss'], kwargs['semantic']
+        del kwargs['heatmap_loss_weight'], kwargs['offsets_loss_weight'], kwargs['offsets_loss'], kwargs['semantic'], kwargs['seg_loss_weight']
         kwargs['wandb_project'] = "ConfLUNet_Semantic"
         trainer = SemanticTrainer(**vars(args))
     else:

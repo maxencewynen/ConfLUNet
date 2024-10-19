@@ -296,8 +296,9 @@ class TrainingPipeline:
 
         self.model.eval()
         start_full_validation_time = time.time()
+        predictors = [self.predictors] if isinstance(self.predictors, Predictor) else self.predictors
 
-        for predictor in self.predictors:
+        for predictor in predictors:
             avg_val_metrics = {k: 0 for k in self.best_metrics[predictor.postprocessor.name].keys()}
             start_this_predictor = time.time()
             predictions_loader = predictor.get_predictions_loader(self.full_val_loader, self.model)
