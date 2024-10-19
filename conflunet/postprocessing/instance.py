@@ -211,7 +211,7 @@ class ConfLUNetPostprocessor(Postprocessor):
 
     def _postprocess(self, output_dict: Dict[str, NdarrayOrTensor]) -> Dict[str, NdarrayOrTensor]:
         semantic_pred_proba = output_dict['semantic_pred_proba']
-        binary_pred = np.squeeze(self._maybe_convert_to_numpy(self.binarize_semantic_probability(semantic_pred_proba)))
+        binary_pred = self._maybe_convert_to_numpy(self.binarize_semantic_probability(semantic_pred_proba))
         instance_seg_pred = label(binary_pred)[0]
         output_dict['instance_seg_pred'] = self._convert_as(instance_seg_pred, semantic_pred_proba)
         output_dict['semantic_pred_binary'] = self._convert_as(binary_pred, semantic_pred_proba)
@@ -242,12 +242,52 @@ class ConfLUNetPostprocessor(Postprocessor):
         output_dict['offsets_pred_y'] = output_dict['offsets_pred'][1]
         output_dict['offsets_pred_z'] = output_dict['offsets_pred'][2]
 
-        output_dict['center_pred_binary'] = self._convert_as(ic.astype(np.int32), semantic_pred_proba)
         output_dict['instance_seg_pred'] = self._convert_as(instance_mask, semantic_pred_proba)
         output_dict['semantic_pred_binary'] = self._convert_as(binary_pred, semantic_pred_proba)
+        if type(output_dict['semantic_pred_proba']) == torch.Tensor:
+            output_dict['semantic_pred_proba'] = torch.squeeze(output_dict['semantic_pred_proba'])
+        else:
+            output_dict['semantic_pred_proba'] = np.squeeze(output_dict['semantic_pred_proba'])
         output_dict = self.refine_instance_segmentation(output_dict)
 
         return output_dict
-        
-        
-        
+
+
+if __name__ == '__main__':
+    from conflunet.utilities.planning_and_configuration import load_dataset_and_configuration
+    from conflunet.architecture.conflunet import ConfLUNet, UNet3D
+    from conflunet.inference.predictors.instance import ConfLUNetPredictor
+    from torch import nn
+    import torch
+    dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(321)
+
+    model = ConfLUNet(1,2, scale_offsets=20)
+    path_to_model = "/home/mwynen/Downloads/best_DSC_SO_A_L1_e-5_h1200o0.3_S20_seed1.pth"
+    model.load_state_dict(torch.load(path_to_model))
+    model.eval()
+
+    p = ConfLUNetPredictor(
+        plans_manager=plans_manager,
+        model=model,
+        postprocessor=ConfLUNetPostprocessor(
+            minimum_instance_size=3,
+            semantic_threshold=0.5,
+            heatmap_threshold=0.1,
+            nms_kernel_size=3,
+            top_k=None,
+            compute_voting=False,
+            calibrate_offsets=False,
+            device=torch.device('cuda:0')
+        ),
+        output_dir='/home/mwynen/data/nnUNet/tmp/output_dir_test',
+        preprocessed_files_dir='/home/mwynen/data/nnUNet/tmp/preprocessed_dir',
+        num_workers=0,
+        save_only_instance_segmentation=False,
+    )
+    # p.predict_from_preprocessed_dir()
+
+    dataloader = p.get_dataloader()
+    predictions_loader = p.get_predictions_loader(dataloader, p.model)
+
+    for data_batch, predicted_batch in zip(dataloader, predictions_loader):
+        break
