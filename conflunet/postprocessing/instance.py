@@ -21,6 +21,7 @@ class ConfLUNetPostprocessor(Postprocessor):
             compute_voting: bool = False,
             calibrate_offsets: bool = False,
             device: torch.device = None,
+            verbose: bool = True
     ):
         """
         ConfLUNet postprocessor
@@ -33,7 +34,8 @@ class ConfLUNetPostprocessor(Postprocessor):
             minimum_size_along_axis=minimum_size_along_axis,
             semantic_threshold=semantic_threshold,
             name="ConfLUNet",
-            device=device
+            device=device,
+            verbose=verbose
         )
         assert 0 <= heatmap_threshold <= 1, "Threshold should be between 0 and 1"
         assert top_k is None or top_k > 0, "top_k should be None or a positive integer"
