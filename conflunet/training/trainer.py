@@ -325,7 +325,8 @@ class TrainingPipeline:
         print(f"Full dataset prediction by all Predictors took {time.time() - start_full_validation_time:.2f} seconds")
 
     def update_metrics(self, avg_val_metrics: dict, gt: dict, pred: dict) -> None:
-        print("[INFO] Computing metrics ...")
+        assert pred['name'] == gt['name'][0], f"GT and Prediction don't match {pred['name']} != {gt['name'][0]}"
+        print(f"[INFO] Computing metrics ... ({pred['name']})")
         start_metric_computation_time = time.time()
         instance_seg_pred = np.squeeze(pred['instance_seg_pred'].detach().cpu().numpy())
         semantic_pred_binary = np.squeeze(pred['semantic_pred_binary'].detach().cpu().numpy())
@@ -338,7 +339,7 @@ class TrainingPipeline:
             else:
                 avg_val_metrics[metric_name] += metric_fn(instance_seg_pred, gt_instance_seg)
 
-        print(f"[INFO] Metric computation for this image took {time.time() - start_metric_computation_time:.2f} seconds")
+        print(f"[INFO] Metric computation for {pred['name']} took {time.time() - start_metric_computation_time:.2f} seconds")
 
     @staticmethod
     def print_val_summary(avg_val_losses: dict, start_validation_time: float, full: bool = False) -> None:
