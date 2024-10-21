@@ -1,9 +1,9 @@
 import os
 import time
-from typing import Callable, Dict
 import wandb
 import warnings
 from os.path import join as pjoin
+from typing import Callable, Dict, Union
 
 from monai.data import DataLoader
 from nnunetv2.paths import  nnUNet_results
@@ -182,10 +182,12 @@ class TrainingPipeline:
     def compute_loss(self, model_outputs: Tuple[torch.Tensor], outputs: Tuple[torch.Tensor]) -> Tuple[torch.Tensor]:
         raise NotImplementedError("Subclass must implement this method")
 
-    def save_train_patch_debug(self, batch_inputs: Tuple[torch.Tensor], model_outputs: torch.Tensor | Tuple[torch.Tensor], epoch: int) -> None:
+    def save_train_patch_debug(self, batch_inputs: Tuple[torch.Tensor],
+                               model_outputs: Union[torch.Tensor, Tuple[torch.Tensor]], epoch: int) -> None:
         raise NotImplementedError("Subclass must implement this method")
 
-    def save_val_patch_debug(self, batch_inputs: Tuple[torch.Tensor], model_outputs: torch.Tensor | Tuple[torch.Tensor], epoch: int) -> None:
+    def save_val_patch_debug(self, batch_inputs: Tuple[torch.Tensor],
+                             model_outputs: Union[torch.Tensor, Tuple[torch.Tensor]], epoch: int) -> None:
         raise NotImplementedError("Subclass must implement this method")
 
     def train_epoch(self, epoch: int) -> None:
@@ -238,7 +240,7 @@ class TrainingPipeline:
         for key in val_metrics:
             val_metrics[key] /= len(self.full_val_loader)
 
-    def prepare_batch(self, batch_data: dict) -> Tuple[torch.Tensor, torch.Tensor | Tuple[torch.Tensor]]:
+    def prepare_batch(self, batch_data: dict) -> Tuple[torch.Tensor, Union[torch.Tensor, Tuple[torch.Tensor]]]:
         raise NotImplementedError("Subclass must implement this method")
 
     @staticmethod

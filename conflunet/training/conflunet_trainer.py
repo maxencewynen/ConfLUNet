@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from typing import Tuple, Callable
+from typing import Tuple, Callable, Union
 from torch.nn import SmoothL1Loss, L1Loss
 
 from conflunet.postprocessing.instance import ConfLUNetPostprocessor
@@ -126,7 +126,7 @@ class ConfLUNetTrainer(TrainingPipeline):
         )
 
     def save_train_patch_debug(self, batch_inputs: Tuple[torch.Tensor, torch.Tensor],
-                               model_outputs: torch.Tensor | Tuple[torch.Tensor], epoch: int) -> None:
+                               model_outputs: Union[torch.Tensor, Tuple[torch.Tensor]], epoch: int) -> None:
         img, (labels, center_heatmap, offsets) = batch_inputs
         semantic_pred, center_heatmap_pred, offsets_pred = model_outputs
         semantic_pred = semantic_pred[0, 1, :, :, :]
@@ -140,7 +140,7 @@ class ConfLUNetTrainer(TrainingPipeline):
         save_patch(center_heatmap_pred.detach().cpu().numpy(), f'Epoch-{epoch}_train_pred_center_heatmap', self.patches_save_dir)
         save_patch(offsets_pred.detach().cpu().numpy(), f'Epoch-{epoch}_train_pred_offsets', self.patches_save_dir)
 
-    def save_val_patch_debug(self, batch_inputs: Tuple[torch.Tensor], model_outputs: torch.Tensor | Tuple[torch.Tensor],
+    def save_val_patch_debug(self, batch_inputs: Tuple[torch.Tensor], model_outputs: Union[torch.Tensor, Tuple[torch.Tensor]],
                              epoch: int) -> None:
         img, (labels, center_heatmap, offsets) = batch_inputs
         semantic_pred, center_heatmap_pred, offsets_pred = model_outputs

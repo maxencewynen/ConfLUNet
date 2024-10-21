@@ -4,14 +4,15 @@ https://github.com/Project-MONAI/MONAI/blob/59a7211070538586369afd4a01eca0a7fe2e
 https://github.com/Project-MONAI/MONAI/blob/59a7211070538586369afd4a01eca0a7fe2e742e/monai/transforms/intensity/dictionary.py
 """
 
-from monai.transforms.transform import Transform, RandomizableTransform
-from monai.utils.enums import TransformBackends
-from monai.utils.type_conversion import convert_to_tensor
-from typing import Sequence, Mapping, Hashable, Any
 import numpy as np
-from monai.transforms import MapTransform
-from monai.config import KeysCollection, NdarrayOrTensor
+from typing import Sequence, Mapping, Hashable, Any, Union
+
 from monai.data import get_track_meta
+from monai.transforms import MapTransform
+from monai.utils.enums import TransformBackends
+from monai.config import KeysCollection, NdarrayOrTensor
+from monai.utils.type_conversion import convert_to_tensor
+from monai.transforms.transform import Transform, RandomizableTransform
 
 
 class AdjustContrast(Transform):
@@ -105,7 +106,7 @@ class RandAdjustContrast(RandomizableTransform):
     def __init__(
         self,
         prob: float = 0.1,
-        gamma: Sequence[float] | float = (0.5, 4.5),
+        gamma: Union[Sequence[float], float] = (0.5, 4.5),
         invert_image: bool = False,
         retain_stats: bool = False,
     ) -> None:
@@ -130,7 +131,7 @@ class RandAdjustContrast(RandomizableTransform):
             self.gamma_value, invert_image=self.invert_image, retain_stats=self.retain_stats
         )
 
-    def randomize(self, data: Any | None = None) -> None:
+    def randomize(self, data: Union[Any, None] = None) -> None:
         super().randomize(None)
         if not self._do_transform:
             return None
@@ -185,7 +186,7 @@ class RandAdjustContrastd(RandomizableTransform, MapTransform):
         self,
         keys: KeysCollection,
         prob: float = 0.1,
-        gamma: tuple[float, float] | float = (0.5, 4.5),
+        gamma: Union[tuple[float, float], float] = (0.5, 4.5),
         invert_image: bool = False,
         retain_stats: bool = False,
         allow_missing_keys: bool = False,
@@ -196,7 +197,7 @@ class RandAdjustContrastd(RandomizableTransform, MapTransform):
         self.invert_image = invert_image
 
     def set_random_state(
-        self, seed: int | None = None, state: np.random.RandomState | None = None
+        self, seed: Union[int, None] = None, state: Union[np.random.RandomState, None] = None
     ):
         super().set_random_state(seed, state)
         self.adjuster.set_random_state(seed, state)

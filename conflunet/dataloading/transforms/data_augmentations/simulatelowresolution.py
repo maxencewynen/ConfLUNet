@@ -4,19 +4,18 @@ https://github.com/Project-MONAI/MONAI/blob/59a7211070538586369afd4a01eca0a7fe2e
 https://github.com/Project-MONAI/MONAI/blob/59a7211070538586369afd4a01eca0a7fe2e742e/monai/transforms/intensity/dictionary.py
 """
 
-from monai.transforms.transform import Transform, RandomizableTransform
-from monai.transforms.spatial.array import RandAffine, Affine, Resize
-from monai.utils.enums import TransformBackends
-from monai.utils import InterpolateMode
-from monai.utils.type_conversion import convert_to_tensor
-from typing import Sequence, Mapping, Hashable, Any
-import numpy as np
-from monai.transforms import MapTransform
-from monai.config import KeysCollection, NdarrayOrTensor
-from monai.data import get_track_meta
 import torch
-from monai.data.meta_obj import get_track_meta, set_track_meta
+import numpy as np
+from typing import Sequence, Mapping, Hashable, Any, Union
+
+from monai.utils import InterpolateMode
+from monai.transforms import MapTransform
 from monai.data.meta_tensor import MetaTensor
+from monai.config import KeysCollection, NdarrayOrTensor
+from monai.utils.type_conversion import convert_to_tensor
+from monai.transforms.transform import RandomizableTransform
+from monai.data.meta_obj import get_track_meta, set_track_meta
+from monai.transforms.spatial.array import RandAffine, Affine, Resize
 
 
 class RandSimulateLowResolution(RandomizableTransform):
@@ -32,11 +31,11 @@ class RandSimulateLowResolution(RandomizableTransform):
     def __init__(
         self,
         prob: float = 0.1,
-        downsample_mode: InterpolateMode | str = InterpolateMode.NEAREST,
-        upsample_mode: InterpolateMode | str = InterpolateMode.TRILINEAR,
+        downsample_mode: Union[InterpolateMode, str] = InterpolateMode.NEAREST,
+        upsample_mode: Union[InterpolateMode, str] = InterpolateMode.TRILINEAR,
         zoom_range: Sequence[float] = (0.5, 1.0),
         align_corners=False,
-        device: torch.device | None = None,
+        device: Union[torch.device, None] = None,
     ) -> None:
         """
         Args:
@@ -60,7 +59,7 @@ class RandSimulateLowResolution(RandomizableTransform):
         self.device = device
         self.zoom_factor = 1.0
 
-    def randomize(self, data: Any | None = None) -> None:
+    def randomize(self, data: Union[Any, None] = None) -> None:
         super().randomize(None)
         self.zoom_factor = self.R.uniform(self.zoom_range[0], self.zoom_range[1])
         if not self._do_transform:
@@ -126,12 +125,12 @@ class RandSimulateLowResolutiond(RandomizableTransform, MapTransform):
         self,
         keys: KeysCollection,
         prob: float = 0.1,
-        downsample_mode: InterpolateMode | str = InterpolateMode.NEAREST,
-        upsample_mode: InterpolateMode | str = InterpolateMode.TRILINEAR,
+        downsample_mode: Union[InterpolateMode, str] = InterpolateMode.NEAREST,
+        upsample_mode: Union[InterpolateMode, str] = InterpolateMode.TRILINEAR,
         zoom_range=(0.5, 1.0),
         align_corners=False,
         allow_missing_keys: bool = False,
-        device: torch.device | None = None,
+        device: Union[torch.device, None] = None,
     ) -> None:
         """
         Args:
@@ -170,7 +169,7 @@ class RandSimulateLowResolutiond(RandomizableTransform, MapTransform):
         )
 
     def set_random_state(
-        self, seed: int | None = None, state: np.random.RandomState | None = None
+        self, seed: Union[int, None] = None, state: Union[np.random.RandomState, None] = None
     ):
         super().set_random_state(seed, state)
         return self

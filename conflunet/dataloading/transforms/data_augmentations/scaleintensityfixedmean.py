@@ -4,17 +4,17 @@ https://github.com/Project-MONAI/MONAI/blob/59a7211070538586369afd4a01eca0a7fe2e
 https://github.com/Project-MONAI/MONAI/blob/59a7211070538586369afd4a01eca0a7fe2e742e/monai/transforms/intensity/dictionary.py
 """
 
-from monai.transforms.transform import Transform, RandomizableTransform
+import numpy as np
+import torch
+from typing import Sequence, Mapping, Hashable, Any, Union
+
+from monai.data import get_track_meta
+from monai.transforms import MapTransform
 from monai.utils.enums import TransformBackends
 from monai.transforms.utils_pytorch_numpy_unification import clip
-from monai.utils.type_conversion import convert_data_type, convert_to_dst_type, convert_to_tensor
-from typing import Callable, Tuple, Sequence, Mapping, Hashable, Any
-import numpy as np
-from monai.transforms import MapTransform
 from monai.config import KeysCollection, DtypeLike, NdarrayOrTensor
-from monai.data import get_track_meta
-import torch
-
+from monai.transforms.transform import Transform, RandomizableTransform
+from monai.utils.type_conversion import convert_data_type, convert_to_dst_type, convert_to_tensor
 
 
 class ScaleIntensityFixedMean(Transform):
@@ -105,6 +105,7 @@ class ScaleIntensityFixedMean(Transform):
         ret = convert_to_dst_type(ret, dst=img, dtype=self.dtype or img_t.dtype)[0]
         return ret
 
+
 class RandScaleIntensityFixedMean(RandomizableTransform):
     """
     Randomly scale the intensity of input image by ``v = v * (1 + factor)`` where the `factor`
@@ -117,7 +118,7 @@ class RandScaleIntensityFixedMean(RandomizableTransform):
     def __init__(
         self,
         prob: float = 0.1,
-        factors: Sequence[float] | float = 0,
+        factors: Union[Sequence[float], float] = 0,
         fixed_mean: bool = True,
         preserve_range: bool = False,
         dtype: DtypeLike = np.float32,
@@ -151,7 +152,7 @@ class RandScaleIntensityFixedMean(RandomizableTransform):
             factor=self.factor, fixed_mean=self.fixed_mean, preserve_range=self.preserve_range, dtype=self.dtype
         )
 
-    def randomize(self, data: Any | None = None) -> None:
+    def randomize(self, data: Union[Any, None] = None) -> None:
         super().randomize(None)
         if not self._do_transform:
             return None
@@ -183,7 +184,7 @@ class RandScaleIntensityFixedMeand(RandomizableTransform, MapTransform):
     def __init__(
         self,
         keys: KeysCollection,
-        factors: Sequence[float] | float,
+        factors: Union[Sequence[float], float],
         fixed_mean: bool = True,
         preserve_range: bool = False,
         prob: float = 0.1,
@@ -215,7 +216,7 @@ class RandScaleIntensityFixedMeand(RandomizableTransform, MapTransform):
         )
 
     def set_random_state(
-        self, seed: int | None = None, state: np.random.RandomState | None = None
+        self, seed: Union[int, None] = None, state: Union[np.random.RandomState, None] = None
     ):
         super().set_random_state(seed, state)
         self.scaler.set_random_state(seed, state)
