@@ -10,7 +10,8 @@ def dice_metric(predictions: np.ndarray, ground_truth: np.ndarray) -> float:
     Returns:
         float: Dice coefficient overlap in [0.0, 1.0] between ground_truth and predictions.
     """
-    assert ground_truth.shape == predictions.shape, "Shapes of ground truth and predictions do not match."
+    assert ground_truth.shape == predictions.shape, \
+        "Shapes of ground truth and predictions do not match ({} != {}).".format(ground_truth.shape, predictions.shape)
     assert set(np.unique(predictions)).issubset({0, 1}), "predictions should be binary."
     assert set(np.unique(ground_truth)).issubset({0, 1}), "ground_truth should be binary."
 
@@ -43,7 +44,8 @@ def dice_norm_metric(predictions: np.ndarray, ground_truth: np.ndarray) -> tuple
              False negative rate (float in [0.0, 1.0]),
              between ground_truth and predictions.
     """
-    assert ground_truth.shape == predictions.shape, "Shapes of ground truth and predictions do not match."
+    assert ground_truth.shape == predictions.shape, \
+        "Shapes of ground truth and predictions do not match ({} != {}).".format(ground_truth.shape, predictions.shape)
     assert set(np.unique(predictions)).issubset({0, 1}), "predictions should be binary."
     assert set(np.unique(ground_truth)).issubset({0, 1}), "ground_truth should be binary."
 

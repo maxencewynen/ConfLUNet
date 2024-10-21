@@ -14,7 +14,8 @@ def dice_per_tp(pred: np.ndarray, ref: np.ndarray, matched_pairs: list):
     Returns:
         list: Dice scores for each matched lesion.
     """
-    assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+    assert pred.shape == ref.shape, \
+        "Shapes of pred and ref do not match ({} != {}).".format(pred.shape, ref.shape)
     assert all([x[0] in np.unique(pred) and x[1] in np.unique(ref) for x in matched_pairs]), \
         "All instances in matched_pairs should be in pred and ref."
     dice_scores = []
@@ -44,7 +45,8 @@ def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = No
     Returns:
         float: Panoptic Quality (PQ) metric.
     """
-    assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+    assert pred.shape == ref.shape, \
+        "Shapes of pred and ref do not match ({} != {}).".format(pred.shape, ref.shape)
 
     if matched_pairs is None or unmatched_pred is None or unmatched_ref is None:
         matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)

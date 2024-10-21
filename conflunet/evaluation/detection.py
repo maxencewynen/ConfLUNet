@@ -19,7 +19,8 @@ def f_beta_score(pred: np.ndarray = None, ref: np.ndarray = None, beta: float = 
         float: F-beta score.
     """
     if matched_pairs is None or unmatched_pred is None or unmatched_ref is None:
-        assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+        assert pred.shape == ref.shape, \
+            "Shapes of pred and ref do not match ({} != {}).".format(pred.shape, ref.shape)
         matched_pairs, unmatched_pred, unmatched_ref = match_instances(pred, ref)
 
     if pred is not None and ref is not None:
@@ -56,7 +57,8 @@ def recall(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list 
         float: Lesion True Positive Rate (recall).
     """
     if matched_pairs is None or unmatched_ref is None:
-        assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+        assert pred.shape == ref.shape, \
+            "Shapes of pred and ref do not match ({} != {}).".format(pred.shape, ref.shape)
         matched_pairs, _, unmatched_ref = match_instances(pred, ref)
 
     if pred is not None and ref is not None:
@@ -84,7 +86,8 @@ def precision(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: li
         float: Positive Predictive Value (precision).
     """
     if matched_pairs is None and unmatched_pred is None:
-        assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+        assert pred.shape == ref.shape, \
+            "Shapes of pred and ref do not match ({} != {}).".format(pred.shape, ref.shape)
         matched_pairs, unmatched_pred, _ = match_instances(pred, ref)
 
     if pred is not None and ref is not None:
@@ -135,7 +138,8 @@ def DiC(pred: np.ndarray, ref: np.ndarray):
     Returns:
         int: The absolute difference in lesion count.
     """
-    assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+    assert pred.shape == ref.shape, \
+        "Shapes of pred and ref do not match ({} != {}).".format(pred.shape, ref.shape)
 
     pred_count = pred_lesion_count(pred)
     ref_count = ref_lesion_count(ref)
