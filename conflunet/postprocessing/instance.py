@@ -211,7 +211,7 @@ class ConfLUNetPostprocessor(Postprocessor):
 
     def _postprocess(self, output_dict: Dict[str, NdarrayOrTensor]) -> Dict[str, NdarrayOrTensor]:
         semantic_pred_proba = output_dict['semantic_pred_proba']
-        binary_pred = self._maybe_convert_to_numpy(self.binarize_semantic_probability(semantic_pred_proba))
+        binary_pred = np.squeeze(self._maybe_convert_to_numpy(self.binarize_semantic_probability(semantic_pred_proba)))
         instance_seg_pred = label(binary_pred)[0]
         output_dict['instance_seg_pred'] = self._convert_as(instance_seg_pred, semantic_pred_proba)
         output_dict['semantic_pred_binary'] = self._convert_as(binary_pred, semantic_pred_proba)
