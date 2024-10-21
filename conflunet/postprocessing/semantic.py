@@ -17,13 +17,15 @@ class ConnectedComponentsPostprocessor(Postprocessor):
             minimum_size_along_axis: int = 0,
             semantic_threshold: float = 0.5,
             device: torch.device = None,
+            verbose : bool = True
     ):
         super(ConnectedComponentsPostprocessor, self).__init__(
             minimum_instance_size=minimum_instance_size,
             minimum_size_along_axis=minimum_size_along_axis,
             semantic_threshold=semantic_threshold,
             name="CC",
-            device=device
+            device=device,
+            verbose=False
         )
 
     def _postprocess(self, output_dict: Dict[str, NdarrayOrTensor]) -> Dict[str, NdarrayOrTensor]:
@@ -48,6 +50,7 @@ class ACLSPostprocessor(Postprocessor):
             semantic_threshold: float = 0.5,
             sigma: float = 1.0,
             device: torch.device = None,
+            verbose: bool = True
     ):
         """sigma (float): Standard deviation of the Gaussian filter used for the Hessian matrix."""
         super(ACLSPostprocessor, self).__init__(
@@ -55,7 +58,8 @@ class ACLSPostprocessor(Postprocessor):
             minimum_size_along_axis=minimum_size_along_axis,
             semantic_threshold=semantic_threshold,
             name="ACLS",
-            device=device
+            device=device,
+            verbose=verbose
         )
         self.sigma = sigma
 

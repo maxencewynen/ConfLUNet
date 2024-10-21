@@ -20,7 +20,8 @@ class SemanticPredictor(Predictor):
             output_dir: Optional[str] = None,
             preprocessed_files_dir: Optional[str] = None,
             num_workers: int = 0,
-            save_only_instance_segmentation: bool = True
+            save_only_instance_segmentation: bool = True,
+            verbose: bool = True
     ):
         super(SemanticPredictor, self).__init__(
             plans_manager=plans_manager,
@@ -29,7 +30,8 @@ class SemanticPredictor(Predictor):
             output_dir=output_dir,
             preprocessed_files_dir=preprocessed_files_dir,
             num_workers=num_workers,
-            save_only_instance_segmentation=save_only_instance_segmentation
+            save_only_instance_segmentation=save_only_instance_segmentation,
+            verbose=verbose
         )
 
     def predict_batch(self, batch: dict, model: torch.nn.Module = None) -> Dict[str, NdarrayOrTensor]:
@@ -51,7 +53,7 @@ class SemanticPredictor(Predictor):
         start = time.time()
         with torch.no_grad():
             outputs = sliding_window_inference(img, patch_size, self.batch_size, self.model, mode='gaussian', overlap=0.5)
-        print(f"[INFO] Sliding window inference took {time.time() - start:.2f} seconds")
+        self.vprint(f"[INFO] Sliding window inference took {time.time() - start:.2f} seconds")
 
         if isinstance(outputs, tuple):
             raise ValueError("The model should output a single tensor, not a tuple of tensors")

@@ -57,11 +57,13 @@ class SemanticTrainer(TrainingPipeline):
                     minimum_instance_size=0,
                     minimum_size_along_axis=0,
                     semantic_threshold=0.5,
-                    device=self.device
+                    device=self.device,
+                    verbose=False
                 ),
                 output_dir=self.full_validation_save_dir,
                 num_workers=self.num_workers,
-                save_only_instance_segmentation=False
+                save_only_instance_segmentation=False,
+                verbose=False
             ),
             # Same as above, but with a different postprocessor
             SemanticPredictor(
@@ -72,11 +74,13 @@ class SemanticTrainer(TrainingPipeline):
                     minimum_size_along_axis=0,
                     semantic_threshold=0.5,
                     sigma=1.0,
-                    device=self.device
+                    device=self.device,
+                    verbose=False
                 ),
                 output_dir=self.full_validation_save_dir,
                 num_workers=self.num_workers,
-                save_only_instance_segmentation=False
+                save_only_instance_segmentation=False,
+                verbose=False
             ),
         ]
 

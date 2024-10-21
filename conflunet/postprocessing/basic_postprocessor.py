@@ -16,6 +16,7 @@ class Postprocessor(Callable):
             semantic_threshold: float = 0.5,
             name: str = "",
             device: torch.device = None,
+            verbose: bool = True
     ):
         super(Postprocessor, self).__init__()
         self.minimum_instance_size = minimum_instance_size
@@ -24,6 +25,11 @@ class Postprocessor(Callable):
         assert 0 <= semantic_threshold <= 1, "Threshold should be between 0 and 1"
         self.semantic_threshold = semantic_threshold
         self.name = name
+        self.verbose = verbose
+
+    def vprint(self, *args, **kwargs):
+        if self.verbose:
+            print(*args, **kwargs)
 
     def _maybe_convert_to_tensor(self, data: NdarrayOrTensor) -> torch.Tensor:
         if isinstance(data, torch.Tensor):
@@ -116,7 +122,7 @@ class Postprocessor(Callable):
         Refines the instance segmentation by relabeling disconnected components in instances
         and removing ALL instances strictly smaller than the minimum size.
         """    
-        print("[INFO] Refining output instance segmentation...", end=" ")
+        self.vprint("[INFO] Refining output instance segmentation...", end=" ")
         assert 'instance_seg_pred' in output_dict.keys(), "output_dict must contain 'instance_seg_pred'"
         instance_mask = self._maybe_convert_to_numpy(output_dict['instance_seg_pred'])
         voxel_size = output_dict['properties']['sitk_stuff']['spacing']
@@ -125,7 +131,7 @@ class Postprocessor(Callable):
 
         iids = np.unique(instance_mask[instance_mask != 0])
         total_iids = len(iids)
-        print(f"({total_iids} predicted instances to review)")
+        self.vprint(f"({total_iids} predicted instances to review)")
         max_instance_id = np.max(instance_mask)
         resulting_instance_mask = np.copy(instance_mask)
 
@@ -189,8 +195,8 @@ class Postprocessor(Callable):
                                                                output_dict["semantic_pred_binary"])
         output_dict['instance_seg_pred'] = self._convert_as(resulting_instance_mask, output_dict['instance_seg_pred'])
 
-        print(f"       Done. Refinement took: {round(time.time() - start, 1)}s")
-        print(f"       Final number of predicted instances: {len(np.unique(resulting_instance_mask)) - 1}.")
+        self.vprint(f"       Done. Refinement took: {round(time.time() - start, 1)}s")
+        self.vprint(f"       Final number of predicted instances: {len(np.unique(resulting_instance_mask)) - 1}.")
 
         return output_dict
 
@@ -198,5 +204,5 @@ class Postprocessor(Callable):
         return output_dict
 
     def __call__(self, output_dict: Dict[str, NdarrayOrTensor]) -> Dict[str, NdarrayOrTensor]:
-        print("[INFO] Postprocessing... (postprocessor: {})".format(self.__class__.__name__))
+        self.vprint("[INFO] Postprocessing... (postprocessor: {})".format(self.__class__.__name__))
         return self._postprocess(output_dict)

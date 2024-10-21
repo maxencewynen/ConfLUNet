@@ -77,10 +77,12 @@ class ConfLUNetTrainer(TrainingPipeline):
                 compute_voting=False,
                 calibrate_offsets=False,
                 device=self.device,
+                verbose=False
             ),
             output_dir=self.full_validation_save_dir,
             num_workers=self.num_workers,
-            save_only_instance_segmentation=False
+            save_only_instance_segmentation=False,
+            verbose=False
         ),
 
         if self.best_metrics is None:

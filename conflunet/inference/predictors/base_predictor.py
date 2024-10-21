@@ -5,6 +5,7 @@ import monai
 import numpy as np
 from pickle import load
 import nibabel as nib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from os.path import join as pjoin
 from typing import Optional, Union, List, Dict, Generator
 from monai.config.type_definitions import NdarrayOrTensor
@@ -37,7 +38,8 @@ class Predictor:
             output_dir: Optional[str] = None,
             preprocessed_files_dir: Optional[str] = None,
             num_workers: int = 0,
-            save_only_instance_segmentation: bool = True
+            save_only_instance_segmentation: bool = True,
+            verbose: bool = True
     ):
         super(Predictor, self).__init__()
         self.plans_manager = plans_manager
@@ -56,11 +58,16 @@ class Predictor:
             os.makedirs(self.preprocessed_files_dir, exist_ok=True)
         self.num_workers = num_workers
         self.configuration = plans_manager.get_configuration('3d_fullres')
-        self.patch_size = self.configuration.patch_size#(96,96,96)#
-        self.batch_size = self.configuration.batch_size#4#
+        self.patch_size = self.configuration.patch_size
+        self.batch_size = self.configuration.batch_size
         self.act = torch.nn.Softmax(dim=1)
         self.should_revert_preprocessing = False
         self.save_only_instance_segmentation = save_only_instance_segmentation
+        self.verbose = verbose
+
+    def vprint(self, *args, **kwargs):
+        if self.verbose:
+            print(*args, **kwargs)
 
     def save_file(self, data: NdarrayOrTensor, name: str, affine: Optional[NdarrayOrTensor] = None) -> None:
         if self.output_dir is None:
@@ -75,7 +82,7 @@ class Predictor:
             affine = np.eye(4)
 
         file_name = pjoin(self.output_dir, f"{name}.nii.gz")
-        print(f"[INFO] Saving {file_name}")
+        self.vprint(f"[INFO] Saving {file_name}")
         nib.save(nib.Nifti1Image(data, affine), file_name)
 
     def save_predictions(self, output: Dict[str, NdarrayOrTensor]) -> None:
@@ -138,26 +145,48 @@ class Predictor:
             self.save_predictions(output)
 
     def get_predictions_loader(self, dataloader: monai.data.DataLoader,
-                              model: torch.nn.Module = None) -> Generator[Dict, None, None]:
+                              model: torch.nn.Module = None,
+                              max_workers: int = 4) -> Generator[Dict, None, None]:
         if model is not None:
             self.model = model
 
-        for i, batch in enumerate(dataloader):
-            print(f"\n\n>>>>> Starting prediction of case {batch['name'][0]} <<<<<")
-            with open(batch['properties_file'][0], 'rb') as f:
-                properties = load(f)
-            start = time.time()
-            ret =  self.convert_to_original_size(
-                self.postprocessor({
-                    **self.predict_batch(batch, self.model),
-                    'name': batch['name'][0],
-                    'properties': properties
-                    }
-                )
-            )
-            elapsed = time.time() - start
-            print(f"[INFO] Full prediction of {batch['name'][0]} took {elapsed:.2f} seconds")
-            yield ret
+        # Create a thread pool executor for postprocessing
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+
+            for i, batch in enumerate(dataloader):
+                print(f"\n\n>>>>> Starting prediction of case {batch['name'][0]} <<<<<")
+                with open(batch['properties_file'][0], 'rb') as f:
+                    properties = load(f)
+
+                # Perform the prediction sequentially
+                start_prediction = time.time()
+                prediction_result = self.predict_batch(batch, self.model)
+                print(f"[INFO] Prediction for {batch['name'][0]} took {time.time() - start_prediction:.2f} seconds")
+
+                # Prepare postprocessing task
+                future = executor.submit(self.process_result, prediction_result, batch['name'][0], properties)
+                futures.append(future)
+
+            # Collect results as they are completed
+            for future in as_completed(futures):
+                result = future.result()
+                yield result
+
+    def process_result(self, prediction_result, name, properties):
+        print(f"[INFO] START Postprocessing for {name}")
+        # Postprocessing task to be run in parallel
+        start_postprocessing = time.time()
+        ret = self.convert_to_original_size(
+            self.postprocessor({
+                **prediction_result,
+                'name': name,
+                'properties': properties
+            })
+        )
+        elapsed_postprocessing = time.time() - start_postprocessing
+        print(f"[INFO] STOP Postprocessing for {name} took {elapsed_postprocessing:.2f} seconds")
+        return ret
 
     def predict_batch(self, batch: dict, model: torch.nn.Module = None) -> Dict[str, NdarrayOrTensor]:
         raise NotImplementedError

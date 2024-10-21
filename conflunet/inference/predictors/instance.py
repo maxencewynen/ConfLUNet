@@ -20,7 +20,8 @@ class ConfLUNetPredictor(Predictor):
             output_dir: Optional[str] = None,
             preprocessed_files_dir: Optional[str] = None,
             num_workers: int = 0,
-            save_only_instance_segmentation: bool = True
+            save_only_instance_segmentation: bool = True,
+            verbose: bool = True
     ):
         super(ConfLUNetPredictor, self).__init__(
             plans_manager=plans_manager,
@@ -29,7 +30,8 @@ class ConfLUNetPredictor(Predictor):
             output_dir=output_dir,
             preprocessed_files_dir=preprocessed_files_dir,
             num_workers=num_workers,
-            save_only_instance_segmentation=save_only_instance_segmentation
+            save_only_instance_segmentation=save_only_instance_segmentation,
+            verbose=verbose
         )
 
     def predict_batch(self, batch: dict, model: torch.nn.Module = None) -> Dict[str, NdarrayOrTensor]:
@@ -51,7 +53,7 @@ class ConfLUNetPredictor(Predictor):
         start = time.time()
         with torch.no_grad():
             outputs = sliding_window_inference(img, patch_size, self.batch_size, self.model, mode='gaussian', overlap=0.5)
-        print(f"[INFO] Sliding window inference took {time.time() - start:.2f} seconds")
+        self.vprint(f"[INFO] Sliding window inference took {time.time() - start:.2f} seconds")
         if not isinstance(outputs, tuple) and len(outputs) != 3:
             raise ValueError("The model should output a tuple of 3 tensors")
 
@@ -96,11 +98,18 @@ if __name__ == '__main__':
         postprocessor=ConfLUNetPostprocessor(
             minimum_instance_size=3,
             semantic_threshold=0.5,
+            verbose=True
         ),
         output_dir='/home/mwynen/data/nnUNet/tmp/output_dir_test',
         preprocessed_files_dir='/home/mwynen/data/nnUNet/tmp/preprocessed_dir',
         num_workers=0,
         save_only_instance_segmentation=False
     )
-    p.predict_from_preprocessed_dir()
+    # p.predict_from_preprocessed_dir()
+    dataloader = p.get_dataloader()
+    predictions_loader = p.get_predictions_loader(dataloader, p.model)
+    start = time.time()
+    for data_batch, predicted_batch in zip(dataloader, predictions_loader):
+        pass
+    print(f"Total time (parallelized): {time.time() - start:.2f} seconds")
     pass
