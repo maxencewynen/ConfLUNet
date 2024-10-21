@@ -150,10 +150,12 @@ class Predictor:
         if model is not None:
             self.model = model
 
-        # Create a thread pool executor for postprocessing
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = []
+        futures = []
+        next_result_idx = 0  # Tracks the next result to yield in the correct order
+        results_dict = {}    # Dictionary to hold completed results, keyed by index
 
+        # Use a thread pool executor for postprocessing
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for i, batch in enumerate(dataloader):
                 print(f"\n\n>>>>> Starting prediction of case {batch['name'][0]} <<<<<")
                 with open(batch['properties_file'][0], 'rb') as f:
@@ -164,14 +166,22 @@ class Predictor:
                 prediction_result = self.predict_batch(batch, self.model)
                 print(f"[INFO] Prediction for {batch['name'][0]} took {time.time() - start_prediction:.2f} seconds")
 
-                # Prepare postprocessing task
+                # Submit postprocessing tasks to be executed in parallel
                 future = executor.submit(self.process_result, prediction_result, batch['name'][0], properties)
-                futures.append(future)
+                futures.append((i, future))  # Store the index along with the future
 
-            # Collect results as they are completed
-            for future in as_completed(futures):
-                result = future.result()
-                yield result
+            # Process the futures as they complete
+            for future in as_completed(future for _, future in futures):
+                # Find the index of the completed task
+                idx = next(idx for idx, f in futures if f == future)
+
+                # Store the result in the dictionary
+                results_dict[idx] = future.result()
+
+                # Yield any ready results in order
+                while next_result_idx in results_dict:
+                    yield results_dict.pop(next_result_idx)
+                    next_result_idx += 1
 
     def process_result(self, prediction_result, name, properties):
         print(f"[INFO] START Postprocessing for {name}")

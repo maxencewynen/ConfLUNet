@@ -110,6 +110,6 @@ if __name__ == '__main__':
     predictions_loader = p.get_predictions_loader(dataloader, p.model)
     start = time.time()
     for data_batch, predicted_batch in zip(dataloader, predictions_loader):
-        pass
+        print(data_batch['name'], predicted_batch['name'])
     print(f"Total time (parallelized): {time.time() - start:.2f} seconds")
     pass
