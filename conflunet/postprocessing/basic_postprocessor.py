@@ -14,6 +14,7 @@ class Postprocessor(Callable):
             minimum_instance_size: int = 0,
             minimum_size_along_axis: int = 0,
             semantic_threshold: float = 0.5,
+            voxel_spacing: Tuple[float, float, float] = None,
             name: str = "",
             device: torch.device = None,
             verbose: bool = True
@@ -21,6 +22,7 @@ class Postprocessor(Callable):
         super(Postprocessor, self).__init__()
         self.minimum_instance_size = minimum_instance_size
         self.minimum_size_along_axis = minimum_size_along_axis
+        self.voxel_spacing = voxel_spacing
         self.device = get_default_device() if device is None else device
         assert 0 <= semantic_threshold <= 1, "Threshold should be between 0 and 1"
         self.semantic_threshold = semantic_threshold
@@ -63,22 +65,20 @@ class Postprocessor(Callable):
             self,
             instance_segmentation: np.array,
             instance_id: int,
-            voxel_spacing: Tuple[float, float, float]
     ) -> bool:
         """
             Check if a instance is too small to be considered a real instance.
             Args:
                 instance_segmentation (np.array): The instance mask.
                 instance_id (int): The id of the instance to be checked.
-                voxel_spacing (Tuple[float, float, float]): The voxel spacing of the image.
         """
         this_instance_indices = np.where(instance_segmentation == instance_id)
         if len(this_instance_indices[0]) == 0:
             return True
-        size_along_x = (1 + max(this_instance_indices[0]) - min(this_instance_indices[0])) * voxel_spacing[0]
-        size_along_y = (1 + max(this_instance_indices[1]) - min(this_instance_indices[1])) * voxel_spacing[1]
+        size_along_x = (1 + max(this_instance_indices[0]) - min(this_instance_indices[0])) * self.voxel_spacing[0]
+        size_along_y = (1 + max(this_instance_indices[1]) - min(this_instance_indices[1])) * self.voxel_spacing[1]
         if len(this_instance_indices) == 3:
-            size_along_z = (1 + max(this_instance_indices[2]) - min(this_instance_indices[2])) * voxel_spacing[2]
+            size_along_z = (1 + max(this_instance_indices[2]) - min(this_instance_indices[2])) * self.voxel_spacing[2]
             # if the connected component is smaller than 3mm in any direction, skip it as it is not
             # clinically considered a instance
             if (size_along_x < self.minimum_size_along_axis or
@@ -89,11 +89,10 @@ class Postprocessor(Callable):
         elif size_along_x < self.minimum_size_along_axis or size_along_y < self.minimum_size_along_axis:
             return True
 
-        return len(this_instance_indices[0]) * np.prod(voxel_spacing) <= self.minimum_instance_size
+        return len(this_instance_indices[0]) * np.prod(self.voxel_spacing) <= self.minimum_instance_size
 
     def remove_small_instances(self, output_dict: Dict[str, NdarrayOrTensor]) -> Dict[str, NdarrayOrTensor]:
-        voxel_spacing = output_dict['properties']['sitk_stuff']['spacing']
-        if (self.minimum_instance_size == 0 and self.minimum_size_along_axis == 0) or voxel_spacing is None:
+        if (self.minimum_instance_size == 0 and self.minimum_size_along_axis == 0) or self.voxel_spacing is None:
             return output_dict
 
         assert 'instance_seg_pred' in output_dict.keys(), "output_dict must contain 'instance_seg_pred'"
@@ -106,7 +105,7 @@ class Postprocessor(Callable):
         for instance_id, lvoxels in zip(label_list, label_counts):
             if instance_id == 0: continue
 
-            if not self.is_too_small(instance_seg_pred, instance_id, voxel_spacing):
+            if not self.is_too_small(instance_seg_pred, instance_id, self.voxel_spacing):
                 instance_seg2[instance_seg_pred == instance_id] = instance_id
             elif 'semantic_pred_binary' in output_dict.keys():
                 output_dict['semantic_pred_binary'][instance_seg_pred == instance_id] = 0

@@ -14,6 +14,7 @@ class ConfLUNetPostprocessor(Postprocessor):
             self,
             minimum_instance_size: int = 0,
             minimum_size_along_axis: int = 0,
+            voxel_spacing: Tuple[float, float, float] = (1, 1, 1),
             semantic_threshold: float = 0.5,
             heatmap_threshold: float = 0.1,
             nms_kernel_size: int = 3,
@@ -32,6 +33,7 @@ class ConfLUNetPostprocessor(Postprocessor):
         super(ConfLUNetPostprocessor, self).__init__(
             minimum_instance_size=minimum_instance_size,
             minimum_size_along_axis=minimum_size_along_axis,
+            voxel_spacing=voxel_spacing,
             semantic_threshold=semantic_threshold,
             name="ConfLUNet",
             device=device,

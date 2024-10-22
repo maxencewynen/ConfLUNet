@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from typing import Dict
+from typing import Dict, Tuple
 from scipy.ndimage import label
 from scipy.spatial.distance import cdist
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
@@ -15,6 +15,7 @@ class ConnectedComponentsPostprocessor(Postprocessor):
             self,
             minimum_instance_size: int = 0,
             minimum_size_along_axis: int = 0,
+            voxel_spacing: Tuple[float, float, float] = (1, 1, 1),
             semantic_threshold: float = 0.5,
             device: torch.device = None,
             verbose : bool = True
@@ -22,10 +23,11 @@ class ConnectedComponentsPostprocessor(Postprocessor):
         super(ConnectedComponentsPostprocessor, self).__init__(
             minimum_instance_size=minimum_instance_size,
             minimum_size_along_axis=minimum_size_along_axis,
+            voxel_spacing=voxel_spacing,
             semantic_threshold=semantic_threshold,
             name="CC",
             device=device,
-            verbose=False
+            verbose=verbose
         )
 
     def _postprocess(self, output_dict: Dict[str, NdarrayOrTensor]) -> Dict[str, NdarrayOrTensor]:
@@ -47,6 +49,7 @@ class ACLSPostprocessor(Postprocessor):
             self,
             minimum_instance_size: int = 0,
             minimum_size_along_axis: int = 0,
+            voxel_spacing: Tuple[float, float, float] = (1, 1, 1),
             semantic_threshold: float = 0.5,
             sigma: float = 1.0,
             device: torch.device = None,
@@ -56,6 +59,7 @@ class ACLSPostprocessor(Postprocessor):
         super(ACLSPostprocessor, self).__init__(
             minimum_instance_size=minimum_instance_size,
             minimum_size_along_axis=minimum_size_along_axis,
+            voxel_spacing=voxel_spacing,
             semantic_threshold=semantic_threshold,
             name="ACLS",
             device=device,
