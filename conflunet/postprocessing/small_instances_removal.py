@@ -33,6 +33,8 @@ def is_too_small(
         # clinically considered a lesion
         if size_along_x < minimum_size_along_axis or size_along_y < minimum_size_along_axis or size_along_z < minimum_size_along_axis:
             return True
+    elif len(this_instance_indices) > 3:
+        raise ValueError("instance segmentation must be 2D or 3D")
     elif size_along_x < minimum_size_along_axis or size_along_y < minimum_size_along_axis:
         return True
 
