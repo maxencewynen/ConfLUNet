@@ -6,7 +6,7 @@ from typing import Sequence, Union
 def is_too_small(
         instance_segmentation: np.array, 
         lesion_id: int, 
-        voxel_size: Sequence[float, float, float] = (1, 1, 1),
+        voxel_size: Sequence[float] = (1, 1, 1),
         minimum_instance_size: int = 14, 
         minimum_size_along_axis: int = 3
 ):
@@ -41,7 +41,7 @@ def is_too_small(
 
 def remove_small_lesions_from_instance_segmentation(
         instance_segmentation: np.ndarray, 
-        voxel_size: Sequence[float, float, float],
+        voxel_size: Sequence[float],
         minimum_instance_size: int = 14, 
         minimum_size_along_axis: int = 3) -> np.ndarray:
     """
@@ -74,7 +74,7 @@ def remove_small_lesions_from_instance_segmentation(
 
 def remove_small_lesions_from_binary_segmentation(
         binary_segmentation: np.ndarray, 
-        voxel_size: Sequence[int, int, int],
+        voxel_size: Sequence[float],
         minimum_instance_size: int = 14, 
         minimum_size_along_axis: int = 3) -> np.ndarray:
     """
