@@ -105,7 +105,7 @@ class Postprocessor(Callable):
         for instance_id, lvoxels in zip(label_list, label_counts):
             if instance_id == 0: continue
 
-            if not self.is_too_small(instance_seg_pred, instance_id, self.voxel_spacing):
+            if not self.is_too_small(instance_seg_pred, instance_id):
                 instance_seg2[instance_seg_pred == instance_id] = instance_id
             elif 'semantic_pred_binary' in output_dict.keys():
                 output_dict['semantic_pred_binary'][instance_seg_pred == instance_id] = 0
@@ -143,7 +143,7 @@ class Postprocessor(Callable):
             components, n_components = label(mask)
             if n_components == 1: # if the instance is not split in components
                 # check if the instance is too small
-                if self.is_too_small(components, 1, voxel_size):
+                if self.is_too_small(components, 1):
                     resulting_instance_mask[mask] = 0
                 continue
     
@@ -161,7 +161,7 @@ class Postprocessor(Callable):
                         resulting_instance_mask[components == cid] = 0
                         continue
     
-                    this_component_is_too_small = self.is_too_small(components, cid, voxel_size)
+                    this_component_is_too_small = self.is_too_small(components, cid)
     
                     # if the component is too small, and it is the first one, we remove the whole instance
                     if j == 0 and this_component_is_too_small:
