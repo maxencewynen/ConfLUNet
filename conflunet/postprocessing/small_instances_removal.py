@@ -6,7 +6,7 @@ from typing import Sequence, Union
 def is_too_small(
         instance_segmentation: np.array, 
         lesion_id: int, 
-        voxel_size: Tuple[float, float, float] = (1, 1, 1),
+        voxel_size: Sequence[float] = (1, 1, 1),
         minimum_instance_size: int = 14, 
         minimum_size_along_axis: int = 3
 ):
@@ -15,13 +15,12 @@ def is_too_small(
     Args:
         instance_segmentation (np.array): The instance mask.
         lesion_id (int): The id of the lesion to be checked.
-        voxel_size (Tuple[float, float, float], optional): The voxel size along each axis.
+        voxel_size (Sequence[float], optional): The voxel size along each axis.
         minimum_instance_size (int, optional): The minimum size of a lesion in mm^3.
         minimum_size_along_axis (int, optional): The minimum size of a lesion along each axis.
     """
-    assert type(voxel_size) == tuple, "Voxel size should be a tuple"
     assert len(voxel_size) == len(instance_segmentation.shape), \
-        "Voxel size should be a tuple of same length as the instance segmentation shape tuple"
+        "voxel_size should be a Sequence of same length as the instance segmentation shape Sequence"
 
     this_instance_indices = np.where(instance_segmentation == lesion_id)
     if len(this_instance_indices[0]) == 0:
@@ -42,23 +41,22 @@ def is_too_small(
 
 def remove_small_lesions_from_instance_segmentation(
         instance_segmentation: np.ndarray, 
-        voxel_size: Tuple[float, float, float],
+        voxel_size: Sequence[float],
         minimum_instance_size: int = 14, 
         minimum_size_along_axis: int = 3) -> np.ndarray:
     """
     Remove all lesions with less volume than `minimum_instance_size` from an instance segmentation mask `instance_segmentation`.
     Args:
         instance_segmentation: `numpy.ndarray` of shape (H, W[, D]), with a binary lesions segmentation mask.
-        voxel_size: `tuple` with the voxel size in mm.
+        voxel_size: `Sequence` with the voxel size in mm.
         minimum_instance_size:  `int`, minimal volume of a lesion.
         minimum_size_along_axis: `int`, minimal size of a lesion along any axis.
     Returns:
         Instance lesion segmentation mask (`numpy.ndarray` of shape (H, W, D]))
     """
 
-    assert type(voxel_size) == tuple, "Voxel size should be a tuple"
     assert len(voxel_size) == len(instance_segmentation.shape), \
-        "Voxel size should be a tuple of same length as the instance segmentation shape tuple"
+        "voxel_size should be a Sequence of same length as the instance segmentation shape Sequence"
 
     label_list, label_counts = np.unique(instance_segmentation, return_counts=True)
 
@@ -76,22 +74,21 @@ def remove_small_lesions_from_instance_segmentation(
 
 def remove_small_lesions_from_binary_segmentation(
         binary_segmentation: np.ndarray, 
-        voxel_size: Tuple[int, int, int],
+        voxel_size: Sequence[float],
         minimum_instance_size: int = 14, 
         minimum_size_along_axis: int = 3) -> np.ndarray:
     """
     Remove all lesions with less volume than `minimum_instance_size` from a binary segmentation mask `binary_segmentation`.
     Args:
         binary_segmentation: `numpy.ndarray` of shape [H, W, D], with a binary lesions segmentation mask.
-        voxel_size: `tuple` of length 3, with the voxel size in mm.
+        voxel_size: `Sequence` of length 3, with the voxel size in mm.
         minimum_instance_size:  `int`, minimal volume of a lesion.
         minimum_size_along_axis: `int`, minimal size of a lesion along any axis.
     Returns:
         Binary lesion segmentation mask (`numpy.ndarray` of shape [H, W, D])
     """
 
-    assert type(voxel_size) == tuple, "Voxel size should be a tuple"
-    assert len(voxel_size) == 3, "Voxel size should be a tuple of length 3"
+    assert len(voxel_size) == 3, "voxel_size should be a Sequence of length 3"
     unique_values = np.unique(binary_segmentation)
     assert (len(unique_values) == 1 and unique_values[0] == 0) or (
                 len(unique_values) == 2 and set(unique_values) == {0, 1}), \
