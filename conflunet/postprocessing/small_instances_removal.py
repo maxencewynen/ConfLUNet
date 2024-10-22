@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.ndimage import label
-from typing import Tuple, Union
+from typing import Sequence, Union
 
 
 def is_too_small(
