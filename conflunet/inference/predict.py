@@ -26,6 +26,17 @@ POSTPROCESSORS = {
 METRICS_TO_AVERAGE = ["PQ", "DSC", "nDSC", "F1", "Recall", "Precision", "Dice_Per_TP", "DiC", "Recall_CLU", "Precision_CLU", "Dice_Per_TP_CLU"]
 METRICS_TO_SUM = ["Pred_Lesion_Count", "Ref_Lesion_Count", "CLU_Count"]
 
+def convert_types(obj):
+    # Convert all np.int32 types to standard python int for json dumping
+    if isinstance(obj, np.int32):
+        return int(obj)
+    if isinstance(obj, np.float32):
+        return float(obj)
+    if isinstance(obj, dict):
+        return {k: convert_types(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [convert_types(i) for i in obj]
+    return obj
 
 def save_metrics(
         all_metrics: List[Dict[str, float]],
@@ -36,25 +47,20 @@ def save_metrics(
     metrics_file = pjoin(save_dir, "metrics_details.json")
     with open(metrics_file, 'w') as f:
         json.dump(all_metrics, f, indent=4)
-
+    
     pred_matches_file = pjoin(save_dir, "pred_matches.json")
     with open(pred_matches_file, 'w') as f:
-        json.dump(all_pred_matches, f, indent=4)
+        json.dump(convert_types(all_pred_matches), f, indent=4)
 
     ref_matches_file = pjoin(save_dir, "ref_matches.json")
     with open(ref_matches_file, 'w') as f:
-        json.dump(all_ref_matches, f, indent=4)
+        json.dump(convert_types(all_ref_matches), f, indent=4)
 
     # compute mean metrics or sum when applicable
     metrics_summary = {}
-    for metric in METRICS_TO_AVERAGE:
-        metrics_summary[metric] = sum([m[metric] for m in all_metrics]) / len(all_metrics)
-    for metric in METRICS_TO_SUM:
-        metrics_summary[metric] = sum([m[metric] for m in all_metrics])
-    if "Recall_CLU" in metrics_summary.keys() and "CLU_Count" in metrics_summary.keys():
-        metrics_summary["TP_CLU"] = round(metrics_summary["Recall_CLU"] * metrics_summary['CLU_Count'])
-    else:
-        metrics_summary['TP_CLU'] = np.nan
+    metrics_summary.update({metric: np.mean([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
+    metrics_summary.update({metric: np.sum([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_SUM})
+    metrics_summary["TP_CLU"] = round(metrics_summary["Recall_CLU"] * metrics_summary['CLU_Count'])
 
     metrics_summary_file = pjoin(save_dir, "metrics_summary.json")
     with open(metrics_summary_file, 'w') as f:
@@ -120,9 +126,9 @@ def predict_fold_ConfLUNet(
     )
 
     # Predict
-    all_metrics = []
-    all_pred_matches = []
-    all_ref_matches = []
+    all_metrics = {}
+    all_pred_matches = {}
+    all_ref_matches = {}
     predictions_loader = predictor.get_predictions_loader(full_val_loader, model, num_workers)
     print(f"[INFO] Starting inference for fold {fold}...")
     for data_batch, predicted_batch in zip(full_val_loader, predictions_loader):
@@ -135,14 +141,10 @@ def predict_fold_ConfLUNet(
                 voxel_size=configuration.spacing,
                 verbose=verbose
             )
-            metrics['name'] = data_batch['name']
-            pprint(metrics, width=1)
-            all_metrics.append(metrics)
-
-            all_pred_matches['name'] = data_batch['name']
-            all_pred_matches.append(pred_matches)
-            all_ref_matches['name'] = data_batch['name']
-            all_ref_matches.append(ref_matches)
+            name = data_batch['name'][0]
+            all_metrics[name] = metrics
+            all_pred_matches[name] = pred_matches
+            all_ref_matches[name] = ref_matches
 
         # Save predictions
         predictor.save_predictions(predicted_batch)
