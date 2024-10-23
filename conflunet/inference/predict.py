@@ -142,7 +142,7 @@ def predict_fold(
         semantic = False
     else:
         postprocessor_name = postprocessor.name
-        metric = "DSC"
+        metric = "Dice_Score"
         checkpoint_filename = f"checkpoint_best_{metric}_{postprocessor_name}.pth"
         semantic = True
 
