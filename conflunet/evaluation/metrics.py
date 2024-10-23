@@ -116,6 +116,7 @@ def compute_metrics(
         metrics["Recall_CLU"] = np.nan
         metrics["Precision_CLU"] = np.nan
         metrics["Dice_Per_TP_CLU"] = np.nan
+        metrics["TP_CLU"] = np.nan
     else:
         clr = recall(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
         clp = precision(matched_pairs=matched_pairs_cl, unmatched_pred=unmatched_pred_cl)
