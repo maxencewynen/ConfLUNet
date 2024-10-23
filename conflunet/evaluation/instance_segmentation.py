@@ -1,10 +1,11 @@
 import numpy as np
+from typing import List
 
 from conflunet.evaluation.utils import match_instances, intersection_over_union
 from conflunet.evaluation.semantic_segmentation import dice_metric
 
 
-def dice_per_tp(pred: np.ndarray, ref: np.ndarray, matched_pairs: list) -> float:
+def dice_per_tp(pred: np.ndarray, ref: np.ndarray, matched_pairs: list) -> List[float]:
     """
     Compute Dice score for each matched lesion.
     Args:
