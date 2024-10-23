@@ -55,7 +55,7 @@ class SemanticTrainer(TrainingPipeline):
                 postprocessor=ConnectedComponentsPostprocessor(
                     minimum_instance_size=14,
                     minimum_size_along_axis=3,
-                    voxel_spacing=self.plans_manager.original_median_spacing_after_transp,
+                    voxel_spacing=self.configuration.spacing,
                     semantic_threshold=0.5,
                     device=self.device,
                     verbose=False
@@ -72,7 +72,7 @@ class SemanticTrainer(TrainingPipeline):
                 postprocessor=ACLSPostprocessor(
                     minimum_instance_size=14,
                     minimum_size_along_axis=3,
-                    voxel_spacing=self.plans_manager.original_median_spacing_after_transp,
+                    voxel_spacing=self.configuration.spacing,
                     semantic_threshold=0.5,
                     sigma=1.0,
                     device=self.device,

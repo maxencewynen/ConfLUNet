@@ -332,7 +332,7 @@ class TrainingPipeline:
         instance_seg_pred = np.squeeze(pred['instance_seg_pred'].detach().cpu().numpy())
         semantic_pred_binary = np.squeeze(pred['semantic_pred_binary'].detach().cpu().numpy())
         gt_instance_seg = remove_small_lesions(np.squeeze(gt['instance_seg'].detach().cpu().numpy()),
-                                               self.plans_manager.original_median_spacing_after_transp)
+                                               self.configuration.spacing)
         gt_semantic = (gt_instance_seg > 0).astype(np.int16)
         
         for metric_name, (metric_fn, semantic) in self.metrics_to_track.items():

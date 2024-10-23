@@ -70,7 +70,7 @@ class ConfLUNetTrainer(TrainingPipeline):
             postprocessor=ConfLUNetPostprocessor(
                 minimum_instance_size=14,
                 minimum_size_along_axis=3,
-                voxel_spacing=self.plans_manager.original_median_spacing_after_transp,
+                voxel_spacing=self.configuration.spacing,
                 semantic_threshold=0.5,
                 heatmap_threshold=0.1,
                 nms_kernel_size=3,
