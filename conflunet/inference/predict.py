@@ -99,6 +99,7 @@ def predict_and_evaluate(
             all_metrics[name] = metrics
             all_pred_matches[name] = pred_matches
             all_ref_matches[name] = ref_matches
+            break
 
         # Save predictions
         predictor.save_predictions(predicted_batch)
@@ -297,7 +298,6 @@ if __name__=="__main__":
         dataset_id=321,
         fold=0,
         model_name="lre-2_s1_o1-h1_fold0",
-        semantic=False,
         save_dir="/home/mwynen/data/nnUNet_v2/nnUNet_output/Dataset321_WMLIS",
         num_workers=8,
         save_only_instance_segmentation=False,
