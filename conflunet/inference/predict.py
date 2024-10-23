@@ -62,8 +62,8 @@ def save_metrics(
 
     # compute mean metrics or sum when applicable
     metrics_summary = {}
-    metrics_summary.update({metric: np.mean([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
-    metrics_summary.update({metric: np.sum([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_SUM})
+    metrics_summary.update({metric: np.nanmean([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
+    metrics_summary.update({metric: np.nansum([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_SUM})
 
     metrics_summary_file = pjoin(save_dir, "metrics_summary.json")
     with open(metrics_summary_file, 'w') as f:
