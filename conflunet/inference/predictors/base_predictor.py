@@ -62,7 +62,7 @@ class Predictor:
         self.patch_size = self.configuration.patch_size
         self.batch_size = self.configuration.batch_size
         self.act = torch.nn.Softmax(dim=1)
-        self.convert_to_original_shape = False
+        self.convert_to_original_shape = convert_to_original_shape
         self.save_only_instance_segmentation = save_only_instance_segmentation
         self.verbose = verbose
 
