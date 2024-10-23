@@ -119,6 +119,7 @@ def compute_metrics(
     else:
         clr = recall(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
         clp = precision(matched_pairs=matched_pairs_cl, unmatched_pred=unmatched_pred_cl)
+        metrics['TP_CLU'] = len(matched_pairs_cl)
         metrics["Recall_CLU"] = clr
         metrics["Precision_CLU"] = clp
 
