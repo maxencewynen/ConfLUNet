@@ -67,7 +67,7 @@ def save_metrics(
 
     metrics_summary_file = pjoin(save_dir, "metrics_summary.json")
     with open(metrics_summary_file, 'w') as f:
-        json.dump(metrics_summary, f, indent=4)
+        json.dump(convert_types(metrics_summary), f, indent=4)
 
 
 def predict_and_evaluate(
