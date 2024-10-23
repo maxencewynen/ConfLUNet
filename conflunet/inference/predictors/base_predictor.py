@@ -39,6 +39,7 @@ class Predictor:
             preprocessed_files_dir: Optional[str] = None,
             num_workers: int = 0,
             save_only_instance_segmentation: bool = True,
+            convert_to_original_shape: bool = False,
             verbose: bool = True
     ):
         super(Predictor, self).__init__()
@@ -61,7 +62,7 @@ class Predictor:
         self.patch_size = self.configuration.patch_size
         self.batch_size = self.configuration.batch_size
         self.act = torch.nn.Softmax(dim=1)
-        self.should_revert_preprocessing = False
+        self.convert_to_original_shape = False
         self.save_only_instance_segmentation = save_only_instance_segmentation
         self.verbose = verbose
 
@@ -95,7 +96,7 @@ class Predictor:
                 continue
 
             affine = np.eye(4)
-            if self.should_revert_preprocessing:
+            if self.convert_to_original_shape:
                 # TODO: retrieve the original affine from the sitk properties stuff
                 raise NotImplementedError
 
@@ -108,7 +109,7 @@ class Predictor:
         raise NotImplementedError
 
     def convert_to_original_size(self, output: Dict[str, NdarrayOrTensor]) -> Dict[str, NdarrayOrTensor]:
-        if not self.should_revert_preprocessing:
+        if not self.convert_to_original_shape:
             return output
         # TODO: implement this method
         raise NotImplementedError
@@ -118,7 +119,7 @@ class Predictor:
             self.model = model
 
         self.preprocess_files(raw_files)
-        self.should_revert_preprocessing = True
+        self.convert_to_original_shape = True
         self.predict_from_preprocessed_dir(self.model)
         os.removedirs(self.preprocessed_files_dir)
 

@@ -21,6 +21,7 @@ class SemanticPredictor(Predictor):
             preprocessed_files_dir: Optional[str] = None,
             num_workers: int = 0,
             save_only_instance_segmentation: bool = True,
+            convert_to_original_shape: bool = False,
             verbose: bool = True
     ):
         super(SemanticPredictor, self).__init__(
@@ -31,6 +32,7 @@ class SemanticPredictor(Predictor):
             preprocessed_files_dir=preprocessed_files_dir,
             num_workers=num_workers,
             save_only_instance_segmentation=save_only_instance_segmentation,
+            convert_to_original_shape=convert_to_original_shape,
             verbose=verbose
         )
 
