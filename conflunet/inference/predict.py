@@ -99,7 +99,6 @@ def predict_and_evaluate(
             all_metrics[name] = metrics
             all_pred_matches[name] = pred_matches
             all_ref_matches[name] = ref_matches
-            break
 
         # Save predictions
         predictor.save_predictions(predicted_batch)
