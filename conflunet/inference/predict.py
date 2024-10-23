@@ -149,3 +149,17 @@ def predict_fold_ConfLUNet(
         save_metrics(all_metrics, all_pred_matches, all_ref_matches, save_dir)
 
 
+if __name__=="__main__":
+    predict_fold_ConfLUNet(
+        dataset_id=321,
+        fold=0,
+        model_name="lre-2_s1_o1-h1_fold0",
+        semantic=False,
+        save_dir="/home/mwynen/data/nnUNet_v2/nnUNet_output/Dataset321",
+        num_workers=0,
+        save_only_instance_segmentation=False,
+        convert_to_original_shape=False,
+        do_i_compute_metrics=True,
+        verbose=True
+    )
+    pass
