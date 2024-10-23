@@ -17,6 +17,10 @@ class PlansManagerInstanceSeg(PlansManager):
         configuration_dict = self._internal_resolve_configuration_inheritance(configuration_name)
         return ConfigurationManagerInstanceSeg(configuration_dict)
 
+    @property
+    def n_channels(self):
+        return len(self.foreground_intensity_properties_per_channel)
+
 
 class ConfigurationManagerInstanceSeg(ConfigurationManager):
     def __init__(self, configuration_dict):
