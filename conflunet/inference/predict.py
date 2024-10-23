@@ -153,7 +153,7 @@ def predict_fold(
 
     # Set paths
     assert os.path.exists(save_dir), f"Path {save_dir} does not exist"
-    save_dir = pjoin(save_dir, model_name, f"fold_{fold}", postprocessor_name)
+    save_dir = pjoin(save_dir, dataset_name, model_name, f"fold_{fold}", postprocessor_name)
     os.makedirs(save_dir, exist_ok=True)
 
     # Initialize predictor based on postprocessor type
