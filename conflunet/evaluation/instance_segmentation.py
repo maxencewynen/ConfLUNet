@@ -4,7 +4,7 @@ from conflunet.evaluation.utils import match_instances, intersection_over_union
 from conflunet.evaluation.semantic_segmentation import dice_metric
 
 
-def dice_per_tp(pred: np.ndarray, ref: np.ndarray, matched_pairs: list):
+def dice_per_tp(pred: np.ndarray, ref: np.ndarray, matched_pairs: list) -> float:
     """
     Compute Dice score for each matched lesion.
     Args:
@@ -30,7 +30,7 @@ def dice_per_tp(pred: np.ndarray, ref: np.ndarray, matched_pairs: list):
 
 
 def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = None, unmatched_pred: list = None,
-                     unmatched_ref: list = None, compute_through: bool = True):
+                     unmatched_ref: list = None) -> float:
     """
     Compute the Panoptic Quality (PQ) metric to compare predicted and reference instance segmentation.
     In this version of the function, we are not considering the background.
@@ -41,7 +41,6 @@ def panoptic_quality(pred: np.ndarray, ref: np.ndarray, matched_pairs: list = No
                         If None, computes it. Defaults to None.
         unmatched_pred: list of unmatched predicted instance ids. If None, computes it. Defaults to None.
         unmatched_ref: list of unmatched ground truth instance ids. If None, computes it. Defaults to None.
-        compute_through: bool, whether to compute the metric even if the prediction contains too many instances.
     Returns:
         float: Panoptic Quality (PQ) metric.
     """
