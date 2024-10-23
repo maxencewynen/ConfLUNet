@@ -12,7 +12,7 @@ def intersection_over_union(pred_mask: np.ndarray, ref_mask: np.ndarray) -> floa
     Returns:
         float: Intersection over Union (IoU) score between the predicted mask and the reference mask.
     """
-    assert pred_mask.shape == ref_mask.shape, "Shapes of pred_mask and ref_mask do not match."
+    assert pred_mask.shape == ref_mask.shape, f"Shapes of pred_mask and ref_mask do not match. ({pred_mask.shape} != {ref_mask.shape})"
     # assert set(np.unique(pred_mask)).issubset({0,1}), "pred_mask should be binary."
     # assert set(np.unique(ref_mask)).issubset({0,1}), "ref_mask should be binary."
     intersection = np.logical_and(pred_mask, ref_mask).sum()
@@ -64,7 +64,7 @@ def match_instances(pred: np.ndarray, ref: np.ndarray, threshold: float = 0.1):
                - unmatched_pred: List of unmatched predicted instance ids.
                - unmatched_ref: List of unmatched ground truth instance ids.
     """
-    assert pred.shape == ref.shape, "Shapes of pred and ref do not match."
+    assert pred.shape == ref.shape, f"Shapes of pred and ref do not match ({pred.shape} != {ref.shape})."
     if not (0 <= threshold <= 1):
         warnings.warn(f"IoU threshold expected to be in the range [0, 1] but got {threshold}.", UserWarning)
 
