@@ -88,6 +88,7 @@ def predict_fold_ConfLUNet(
     checkpoint = pjoin(nnUNet_results, dataset_name, model_name, f"fold_{fold}", filename)
     model = load_model(configuration, checkpoint, n_channels, semantic)
     model.to(device)
+    model.eval()
 
     # Set paths
     assert os.path.exists(save_dir), f"Path {save_dir} does not exist"
@@ -125,10 +126,12 @@ def predict_fold_ConfLUNet(
     predictions_loader = predictor.get_predictions_loader(full_val_loader, model, num_workers)
     print(f"[INFO] Starting inference for fold {fold}...")
     for data_batch, predicted_batch in zip(full_val_loader, predictions_loader):
+        instance_seg_pred = np.squeeze(predicted_batch['instance_seg_pred'].detach().cpu().numpy())
+        instance_seg_ref = np.squeeze(data_batch['instance_seg'].detach().cpu().numpy())
         if do_i_compute_metrics:
             metrics, pred_matches, ref_matches = compute_metrics(
-                predicted_batch['instance_seg_pred'],
-                data_batch['instance_seg'],
+                instance_seg_pred,
+                instance_seg_ref,
                 voxel_size=configuration.spacing,
                 verbose=verbose
             )
