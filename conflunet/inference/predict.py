@@ -270,31 +270,39 @@ def predict_all_folds(
 
     if do_i_compute_metrics:
         # summarize metrics
-        all_metrics = {}
-        for fold in range(5):
-            fold_metrics_file = pjoin(save_dir, model_name, f"fold_{fold}", "ConfLUNet", "metrics_summary.json")
-            with open(fold_metrics_file, 'r') as f:
-                this_fold_metrics = json.load(f)
-                all_metrics[f"fold_{fold}"] = this_fold_metrics
+        postprocessor_names = []
+        for p in postprocessors:
+            if isinstance(p, str):
+                postprocessor_names += [p]
+            else:
+                postprocessor_names += [p.name]
 
-        metrics_folds_details_file = pjoin(save_dir, model_name, "ConfLUNet", "metrics_fold_details.json")
-        with open(metrics_folds_details_file, 'w') as f:
-            json.dump(all_metrics, f, indent=4)
+        for pp_name in postprocessor_names:
+            all_metrics = {}
+            for fold in range(5):
+                    fold_metrics_file = pjoin(save_dir, dataset_name, model_name, f"fold_{fold}", pp_name, "metrics_summary.json")
+                    with open(fold_metrics_file, 'r') as f:
+                        this_fold_metrics = json.load(f)
+                        all_metrics[f"fold_{fold}"] = this_fold_metrics
 
-        # compute mean metrics or sum when applicable
-        metrics_summary = {}
-        metrics_summary.update({metric: np.mean([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
-        metrics_summary.update({metric: np.sum([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_SUM})
+            metrics_folds_details_file = pjoin(save_dir, dataset_name, model_name, f"metrics_fold_details_{pp_name}.json")
+            with open(metrics_folds_details_file, 'w') as f:
+                json.dump(convert_types(all_metrics), f, indent=4)
 
-        metrics_summary_file = pjoin(save_dir, model_name, "ConfLUNet", "metrics_avg_across_folds.json")
-        with open(metrics_summary_file, 'w') as f:
-            json.dump(metrics_summary, f, indent=4)
+            # compute mean metrics or sum when applicable
+            metrics_summary = {}
+            metrics_summary.update({metric: np.mean([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
+            metrics_summary.update({metric: np.sum([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_SUM})
 
-        metrics_std = {}
-        metrics_std.update({metric: np.std([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
-        metrics_std_file = pjoin(save_dir, model_name, "ConfLUNet", "metrics_std_across_folds.json")
-        with open(metrics_std_file, 'w') as f:
-            json.dump(metrics_std, f, indent=4)
+            metrics_summary_file = pjoin(save_dir, dataset_name, model_name, f"metrics_avg_across_folds_{pp_name}.json")
+            with open(metrics_summary_file, 'w') as f:
+                json.dump(convert_types(metrics_summary), f, indent=4)
+
+            metrics_std = {}
+            metrics_std.update({metric: np.std([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
+            metrics_std_file = pjoin(save_dir, dataset_name, model_name, f"metrics_std_across_folds_{pp_name}.json")
+            with open(metrics_std_file, 'w') as f:
+                json.dump(convert_types(metrics_std), f, indent=4)
 
 
 if __name__=="__main__":
