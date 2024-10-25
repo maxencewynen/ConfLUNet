@@ -13,46 +13,18 @@ from conflunet.inference.predictors.instance import ConfLUNetPredictor
 from conflunet.inference.predictors.semantic import SemanticPredictor
 from conflunet.postprocessing.instance import ConfLUNetPostprocessor
 from conflunet.postprocessing.semantic import ACLSPostprocessor, ConnectedComponentsPostprocessor
-from conflunet.postprocessing.utils import convert_types
 from conflunet.utilities.planning_and_configuration import load_dataset_and_configuration, \
     ConfigurationManagerInstanceSeg, PlansManagerInstanceSeg
 from conflunet.architecture.utils import load_model
 from conflunet.training.utils import get_default_device
 from conflunet.evaluation.metrics import *
+from conflunet.evaluation.utils import *
 
 POSTPROCESSORS = {
     "ConfLUNet": ConfLUNetPostprocessor,
     "ACLS": ACLSPostprocessor,
     "ConnectedComponents": ConnectedComponentsPostprocessor
 }
-
-
-def save_metrics(
-        all_metrics: Dict[str, Dict[str, float]],
-        all_pred_matches: Dict[str, Dict[str, List[float]]],
-        all_ref_matches: Dict[str, Dict[str, List[float]]],
-        save_dir: str
-) -> None:
-    metrics_file = pjoin(save_dir, "metrics_details.json")
-    with open(metrics_file, 'w') as f:
-        json.dump(all_metrics, f, indent=4)
-    
-    pred_matches_file = pjoin(save_dir, "pred_matches.json")
-    with open(pred_matches_file, 'w') as f:
-        json.dump(convert_types(all_pred_matches), f, indent=4)
-
-    ref_matches_file = pjoin(save_dir, "ref_matches.json")
-    with open(ref_matches_file, 'w') as f:
-        json.dump(convert_types(all_ref_matches), f, indent=4)
-
-    # compute mean metrics or sum when applicable
-    metrics_summary = {}
-    metrics_summary.update({metric: np.nanmean([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
-    metrics_summary.update({metric: np.nansum([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_SUM})
-
-    metrics_summary_file = pjoin(save_dir, "metrics_summary.json")
-    with open(metrics_summary_file, 'w') as f:
-        json.dump(convert_types(metrics_summary), f, indent=4)
 
 
 def predict_and_evaluate(
@@ -263,7 +235,7 @@ def predict_all_folds(
                 postprocessor_names += [p.name]
 
         for pp_name in postprocessor_names:
-            compute_and_save_metrics_from_model_and_postprocessor(dataset_name, model_name, pp_name, save_dir)
+            summarize_metrics_from_model_and_postprocessor(dataset_name, model_name, pp_name, save_dir)
 
 
 

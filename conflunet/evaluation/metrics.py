@@ -10,10 +10,6 @@ from conflunet.evaluation.instance_segmentation import panoptic_quality, dice_pe
 from conflunet.evaluation.detection import f_beta_score, recall, precision, pred_lesion_count, ref_lesion_count, DiC
 
 
-METRICS_TO_AVERAGE = ["PQ", "DSC", "nDSC", "F1", "Recall", "Precision", "Dice_Per_TP", "DiC", "Recall_CLU", "Precision_CLU", "Dice_Per_TP_CLU"]
-METRICS_TO_SUM = ["Pred_Lesion_Count", "Ref_Lesion_Count", "CLU_Count", "TP_CLU"]
-
-
 def vprint(verbose, *args, **kwargs):
     if verbose:
         print(*args, **kwargs)
@@ -184,40 +180,6 @@ def compute_metrics(
         all_ref_matches["DSC"].append(this_pairs_dsc)
 
     return metrics, all_pred_matches, all_ref_matches
-
-
-def compute_and_save_metrics_from_model_and_postprocessor(dataset_name, model_name, postprocessor_name, save_dir):
-    from conflunet.postprocessing.utils import convert_types
-    from os.path import join as pjoin
-    import json
-
-    all_metrics = {}
-    for fold in range(5):
-        fold_metrics_file = pjoin(save_dir, dataset_name, model_name, f"fold_{fold}", postprocessor_name,
-                                  "metrics_summary.json")
-        with open(fold_metrics_file, 'r') as f:
-            this_fold_metrics = json.load(f)
-            all_metrics[f"fold_{fold}"] = this_fold_metrics
-
-    metrics_folds_details_file = pjoin(save_dir, dataset_name, model_name, f"metrics_fold_details_{postprocessor_name}.json")
-    with open(metrics_folds_details_file, 'w') as f:
-        json.dump(convert_types(all_metrics), f, indent=4)
-
-    # compute mean metrics or sum when applicable
-    metrics_summary = {}
-    metrics_summary.update(
-        {metric: np.mean([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
-    metrics_summary.update({metric: np.sum([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_SUM})
-
-    metrics_summary_file = pjoin(save_dir, dataset_name, model_name, f"metrics_avg_across_folds_{postprocessor_name}.json")
-    with open(metrics_summary_file, 'w') as f:
-        json.dump(convert_types(metrics_summary), f, indent=4)
-
-    metrics_std = {}
-    metrics_std.update({metric: np.std([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
-    metrics_std_file = pjoin(save_dir, dataset_name, model_name, f"metrics_std_across_folds_{postprocessor_name}.json")
-    with open(metrics_std_file, 'w') as f:
-        json.dump(convert_types(metrics_std), f, indent=4)
 
 
 if __name__ == "__main__":
