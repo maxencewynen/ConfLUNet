@@ -3,7 +3,7 @@ import numpy as np
 
 def convert_types(obj):
     # Convert all np.int32 types to standard python int for json dumping
-    if isinstance(obj, np.int32) or isinstance(obj, np.int64):
+    if isinstance(obj, np.int32) or isinstance(obj, np.int64) or isinstance(obj, np.int8):
         return int(obj)
     if isinstance(obj, np.float32)  or isinstance(obj, np.float64):
         return float(obj)
