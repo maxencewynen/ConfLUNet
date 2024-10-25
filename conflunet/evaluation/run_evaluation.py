@@ -71,8 +71,8 @@ def compute_metrics_from_preprocessed_data_model_postprocessor_all_folds(
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
         results = list(executor.map(process_fold, range(5)))
-
-    summarize_metrics_from_model_and_postprocessor(dataset_id, model_name, postprocessor_name, output_dir)
+    dataset_name = load_dataset_and_configuration(dataset_id)[0]
+    summarize_metrics_from_model_and_postprocessor(dataset_name, model_name, postprocessor_name, output_dir)
 
 
 def compute_metrics_from_model_name(
