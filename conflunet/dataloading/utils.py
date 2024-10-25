@@ -18,7 +18,8 @@ from monai.transforms import (
 from conflunet.dataloading.transforms.data_augmentations.scaleintensityfixedmean import RandScaleIntensityFixedMeand
 from conflunet.dataloading.transforms.data_augmentations.adjustcontrast import RandAdjustContrastd
 from conflunet.dataloading.transforms.data_augmentations.simulatelowresolution import RandSimulateLowResolutiond
-from conflunet.dataloading.transforms.loading import CustomLoadNPZInstanced, LesionOffsetTransformd
+from conflunet.dataloading.transforms.loading import CustomLoadNPZInstanced, LesionOffsetTransformd, \
+    RemoveSmallInstancesTransform
 from conflunet.dataloading.transforms.utils import *
 
 
@@ -109,7 +110,12 @@ def get_nnunet_augmentations(image_key: str = "img", seg_keys: Sequence[str] = (
 
 
 def get_train_transforms(seed: Union[int, None] = None,
-                         patch_size: Tuple = (128, 128, 128)) -> Compose:
+                         patch_size: Tuple = (128, 128, 128),
+                         remove_small_instances: bool = False,
+                         voxel_size: Tuple = (1, 1, 1),
+                         minimum_instance_size: int = 14,
+                         minimum_size_along_axis: int = 3
+                         ) -> Compose:
     transform_list = [
         CustomLoadNPZInstanced(keys=['data']),
         FgBgToIndicesd(keys=['seg']),
@@ -131,6 +137,11 @@ def get_train_transforms(seed: Union[int, None] = None,
         ToTensord(keys=['img', 'seg', 'offsets', 'center_heatmap', 'brainmask']),
         DeleteKeysd(keys=['properties']),
     ]
+    if remove_small_instances:
+        transform_list.insert(1, RemoveSmallInstancesTransform(
+            keys=["instance_seg", "seg"], instance_seg_key="instance_seg", voxel_size=voxel_size,
+            minimum_instance_size=minimum_instance_size, minimum_size_along_axis=minimum_size_along_axis)
+                              )
     transform = Compose(transform_list)
 
     if seed is not None:
@@ -139,7 +150,12 @@ def get_train_transforms(seed: Union[int, None] = None,
 
 
 def get_val_transforms(seed: Union[int, None] = None,
-                       patch_size: Tuple = (128, 128, 128)) -> Compose:
+                       patch_size: Tuple = (128, 128, 128),
+                       remove_small_instances: bool = False,
+                       voxel_size: Tuple = (1, 1, 1),
+                       minimum_instance_size: int = 14,
+                       minimum_size_along_axis: int = 3
+                       ) -> Compose:
 
     transform_list = [
         CustomLoadNPZInstanced(keys=['data']),
@@ -156,6 +172,11 @@ def get_val_transforms(seed: Union[int, None] = None,
         ToTensord(keys=['img', 'seg', 'offsets', 'center_heatmap', 'brainmask']),
         DeleteKeysd(keys=['properties']),
     ]
+    if remove_small_instances:
+        transform_list.insert(1, RemoveSmallInstancesTransform(
+            keys=["instance_seg", "seg"], instance_seg_key="instance_seg", voxel_size=voxel_size,
+            minimum_instance_size=minimum_instance_size, minimum_size_along_axis=minimum_size_along_axis)
+                              )
     transform = Compose(transform_list)
 
     if seed is not None:
@@ -163,11 +184,17 @@ def get_val_transforms(seed: Union[int, None] = None,
     return transform
 
 
-def get_test_transforms(test: bool = True) -> Compose:
+def get_test_transforms(test: bool = True, voxel_size: Tuple = (1, 1, 1),
+                        minimum_instance_size: int = 14, minimum_size_along_axis: int = 3) -> Compose:
     transform_list = [
         CustomLoadNPZInstanced(keys=['data'], test=test),
         ToTensord(keys=['img', 'brainmask'], allow_missing_keys=True),
         DeleteKeysd(keys=['properties']),
     ]
+    if not test:
+        transform_list.insert(1, RemoveSmallInstancesTransform(
+            keys=["instance_seg", "seg"], instance_seg_key="instance_seg", voxel_size=voxel_size,
+            minimum_instance_size=minimum_instance_size, minimum_size_along_axis=minimum_size_along_axis
+        ))
     transform = Compose(transform_list)
     return transform

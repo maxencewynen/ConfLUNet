@@ -55,14 +55,12 @@ class CustomLoadNPZInstanced(MapTransform):
         return d
 
 
-def make_offset_matrices(data, sigma=2, voxel_size=(1, 1, 1), remove_small_lesions=False, l_min=14):
+def make_offset_matrices(data, sigma=2):
     # Define 3D Gaussian function
     def gaussian_3d(x, y, z, cx, cy, cz, sigma):
         return np.exp(-((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) / (2 * sigma ** 2))
 
     data = np.squeeze(data)
-    if remove_small_lesions:
-        data = remove_small_lesions_from_instance_segmentation(data, voxel_size=voxel_size, l_min=l_min)
 
     heatmap = np.zeros_like(data, dtype=np.float32)
     offset_x = np.zeros_like(data, dtype=np.float32)
@@ -105,7 +103,7 @@ class LesionOffsetTransformd(MapTransform):
     A MONAI transform to compute the offsets for each voxel from the center of mass of its lesion.
     """
 
-    def __init__(self, keys: KeysCollection, allow_missing_keys=False, remove_small_lesions=False, l_min=14, sigma=2):
+    def __init__(self, keys: KeysCollection, allow_missing_keys=False, sigma=2):
         """
         Args:
             key (str): the key corresponding to the desired data in the dictionary to apply the transformation.
@@ -113,23 +111,49 @@ class LesionOffsetTransformd(MapTransform):
         super().__init__(keys, allow_missing_keys=allow_missing_keys)
         if type(keys) == list and len(keys) > 1:
             raise Exception("This transform should only be used with 1 key.")
-        self.remove_small_lesions = remove_small_lesions
-        self.l_min = l_min
         self.sigma = sigma
 
     def __call__(self, data):
         d = dict(data)
-        voxel_size = tuple(data['properties']['sitk_stuff']['spacing'])
         for key in self.key_iterator(d):
-            com_gt, com_reg = self.make_offset_matrices(d[key], voxel_size=voxel_size, sigma=self.sigma)
+            com_gt, com_reg = self.make_offset_matrices(d[key], sigma=self.sigma)
             d["center_heatmap"] = com_gt
             d["offsets"] = com_reg
             # d["seg"] = (d[key] > 0).astype(np.uint8)
         return d
 
-    def make_offset_matrices(self, data, sigma=2, voxel_size=(1, 1, 1)):
-        return make_offset_matrices(data,
-                                    sigma=sigma,
-                                    voxel_size=voxel_size,
-                                    remove_small_lesions=self.remove_small_lesions,
-                                    l_min=self.l_min)
+    def make_offset_matrices(self, data, sigma=2):
+        return make_offset_matrices(data, sigma=sigma)
+
+
+class RemoveSmallInstancesTransform(MapTransform):
+    def __init__(self, keys: KeysCollection, minimum_instance_size: int = 14, minimum_size_along_axis: int = 3, voxel_size=(1, 1, 1),
+                 instance_seg_key='instance_seg'):
+        super().__init__(keys)
+        self.keys = keys
+        self.minimum_instance_size = minimum_instance_size
+        self.minimum_size_along_axis = minimum_size_along_axis
+        self.voxel_size = voxel_size
+        self.instance_seg_key = instance_seg_key
+
+    def __call__(self, data):
+        d = dict(data)
+        original_shape = d[self.instance_seg_key].shape
+        batch_size = d[self.instance_seg_key].shape[0]
+        cleaned_instance_segmentations = []
+        for i in range(batch_size):
+             cleaned_instance_segmentations.append(
+                 remove_small_lesions_from_instance_segmentation(np.squeeze(data[self.instance_seg_key][i]),
+                                                                 voxel_size=self.voxel_size,
+                                                                 minimum_instance_size=self.minimum_size_along_axis)
+             )
+        d[self.instance_seg_key] = np.stack(cleaned_instance_segmentations, axis=0)
+        assert d[self.instance_seg_key].shape == original_shape, f"Expected shape {original_shape}, got {d[self.instance_seg_key].shape}"
+
+        for key in self.key_iterator(d):
+            if key == self.instance_seg_key:
+                continue
+            if key in d.keys():
+                d[key] *= (d[self.instance_seg_key] > 0).astype(np.float32)
+
+        return d
