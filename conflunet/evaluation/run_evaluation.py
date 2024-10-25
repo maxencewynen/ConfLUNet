@@ -50,6 +50,17 @@ def compute_metrics_from_preprocessed_data_model_postprocessor_and_fold(
     save_metrics(all_metrics, all_pred_matches, all_ref_matches, save_dir)
 
 
+def process_fold(fold, dataset_id, output_dir, model_name, postprocessor_name, verbose):
+    return compute_metrics_from_preprocessed_data_model_postprocessor_and_fold(
+        dataset_id,
+        output_dir,
+        model_name,
+        postprocessor_name,
+        fold,
+        verbose
+    )
+
+
 def compute_metrics_from_preprocessed_data_model_postprocessor_all_folds(
         dataset_id: str,
         output_dir: str,
@@ -59,18 +70,16 @@ def compute_metrics_from_preprocessed_data_model_postprocessor_all_folds(
 ):
     import concurrent.futures
 
-    def process_fold(fold):
-        compute_metrics_from_preprocessed_data_model_postprocessor_and_fold(
-            dataset_id,
-            output_dir,
-            model_name,
-            postprocessor_name,
-            fold,
-            verbose
-        )
-
     with concurrent.futures.ProcessPoolExecutor() as executor:
-        results = list(executor.map(process_fold, range(5)))
+        results = list(executor.map(
+            process_fold,
+            range(5),  # Folds 0 to 4
+            [dataset_id] * 5,
+            [output_dir] * 5,
+            [model_name] * 5,
+            [postprocessor_name] * 5,
+            [verbose] * 5
+        ))
     dataset_name = load_dataset_and_configuration(dataset_id)[0]
     summarize_metrics_from_model_and_postprocessor(dataset_name, model_name, postprocessor_name, output_dir)
 
