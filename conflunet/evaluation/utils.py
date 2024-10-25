@@ -128,7 +128,7 @@ def match_instances(
                 break  # perfect match found
 
         if max_iou > threshold:
-            matched_pairs.append((pred_id, matched_ref_id))
+            matched_pairs.append((pred_id, matched_ref_id, max_iou))
         else:
             unmatched_pred.append(pred_id)
 
