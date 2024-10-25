@@ -94,16 +94,16 @@ def compute_metrics_from_model_name(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run evaluation from model name and postprocessor name')
-    parser.add_argument('--dataset_id', type=str, help='Dataset ID')
+    parser.add_argument('--dataset_id', type=int, help='Dataset ID')
     parser.add_argument('--output_dir', type=str, help='Output directory')
     parser.add_argument('--model_name', type=str, help='Model name')
     parser.add_argument('--postprocessor_name', type=str, default=None, help='Postprocessor name')
     parser.add_argument('--fold', type=int, default=None, help='Fold number')
-    parser.add_argument('--verbose', type=bool, help='Verbose')
+    parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
 
     if args.fold is None and args.postprocessor_name is None:
-        compute_metrics_from_model_name(args.dataset_id, args.output_dir, args.model_name, args.verbose)
+        compute_metrics_from_model_name(args.dataset_id, args.output_dir, args.model_name, None, args.verbose)
     elif args.fold is None:
         compute_metrics_from_preprocessed_data_model_postprocessor_all_folds(args.dataset_id, args.output_dir,
                                                                              args.model_name, args.postprocessor_name,
