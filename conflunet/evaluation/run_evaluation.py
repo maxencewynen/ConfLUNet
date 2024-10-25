@@ -1,8 +1,4 @@
 import os
-import argparse
-from os.path import join as pjoin
-import nibabel as nib
-import numpy as np
 
 from nnunetv2.paths import nnUNet_preprocessed
 
@@ -61,7 +57,9 @@ def compute_metrics_from_preprocessed_data_model_postprocessor_all_folds(
         postprocessor_name: str,
         verbose: bool = False
 ):
-    for fold in range(5):
+    import concurrent.futures
+
+    def process_fold(fold):
         compute_metrics_from_preprocessed_data_model_postprocessor_and_fold(
             dataset_id,
             output_dir,
@@ -70,6 +68,9 @@ def compute_metrics_from_preprocessed_data_model_postprocessor_all_folds(
             fold,
             verbose
         )
+
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        results = list(executor.map(process_fold, range(5)))
 
     summarize_metrics_from_model_and_postprocessor(dataset_id, model_name, postprocessor_name, output_dir)
 
