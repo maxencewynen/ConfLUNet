@@ -13,33 +13,18 @@ from conflunet.inference.predictors.instance import ConfLUNetPredictor
 from conflunet.inference.predictors.semantic import SemanticPredictor
 from conflunet.postprocessing.instance import ConfLUNetPostprocessor
 from conflunet.postprocessing.semantic import ACLSPostprocessor, ConnectedComponentsPostprocessor
+from conflunet.postprocessing.utils import convert_types
 from conflunet.utilities.planning_and_configuration import load_dataset_and_configuration, \
     ConfigurationManagerInstanceSeg, PlansManagerInstanceSeg
 from conflunet.architecture.utils import load_model
 from conflunet.training.utils import get_default_device
-from conflunet.evaluation.metrics import compute_metrics
+from conflunet.evaluation.metrics import *
 
 POSTPROCESSORS = {
     "ConfLUNet": ConfLUNetPostprocessor,
     "ACLS": ACLSPostprocessor,
     "ConnectedComponents": ConnectedComponentsPostprocessor
 }
-
-METRICS_TO_AVERAGE = ["PQ", "DSC", "nDSC", "F1", "Recall", "Precision", "Dice_Per_TP", "DiC", "Recall_CLU", "Precision_CLU", "Dice_Per_TP_CLU"]
-METRICS_TO_SUM = ["Pred_Lesion_Count", "Ref_Lesion_Count", "CLU_Count", "TP_CLU"]
-
-
-def convert_types(obj):
-    # Convert all np.int32 types to standard python int for json dumping
-    if isinstance(obj, np.int32) or isinstance(obj, np.int64):
-        return int(obj)
-    if isinstance(obj, np.float32)  or isinstance(obj, np.float64):
-        return float(obj)
-    if isinstance(obj, dict):
-        return {k: convert_types(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [convert_types(i) for i in obj]
-    return obj
 
 
 def save_metrics(
@@ -278,31 +263,8 @@ def predict_all_folds(
                 postprocessor_names += [p.name]
 
         for pp_name in postprocessor_names:
-            all_metrics = {}
-            for fold in range(5):
-                    fold_metrics_file = pjoin(save_dir, dataset_name, model_name, f"fold_{fold}", pp_name, "metrics_summary.json")
-                    with open(fold_metrics_file, 'r') as f:
-                        this_fold_metrics = json.load(f)
-                        all_metrics[f"fold_{fold}"] = this_fold_metrics
+            compute_and_save_metrics_from_model_and_postprocessor(dataset_name, model_name, pp_name, save_dir)
 
-            metrics_folds_details_file = pjoin(save_dir, dataset_name, model_name, f"metrics_fold_details_{pp_name}.json")
-            with open(metrics_folds_details_file, 'w') as f:
-                json.dump(convert_types(all_metrics), f, indent=4)
-
-            # compute mean metrics or sum when applicable
-            metrics_summary = {}
-            metrics_summary.update({metric: np.mean([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
-            metrics_summary.update({metric: np.sum([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_SUM})
-
-            metrics_summary_file = pjoin(save_dir, dataset_name, model_name, f"metrics_avg_across_folds_{pp_name}.json")
-            with open(metrics_summary_file, 'w') as f:
-                json.dump(convert_types(metrics_summary), f, indent=4)
-
-            metrics_std = {}
-            metrics_std.update({metric: np.std([d[metric] for d in all_metrics.values()]) for metric in METRICS_TO_AVERAGE})
-            metrics_std_file = pjoin(save_dir, dataset_name, model_name, f"metrics_std_across_folds_{pp_name}.json")
-            with open(metrics_std_file, 'w') as f:
-                json.dump(convert_types(metrics_std), f, indent=4)
 
 
 if __name__=="__main__":
