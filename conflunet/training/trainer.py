@@ -154,9 +154,11 @@ class TrainingPipeline:
         self.model = get_model(self.configuration, self.n_channels, self.semantic).to(self.device)
 
         # Initialize optimizer and scheduler according to nnunet
-        self.optimizer = torch.optim.SGD(self.model.parameters(), self.learning_rate,
-                                         weight_decay=self.weight_decay, momentum=self.momentum)
-        self.lr_scheduler = PolyLRScheduler(self.optimizer, self.learning_rate, self.n_epochs)
+        #self.optimizer = torch.optim.SGD(self.model.parameters(), self.learning_rate,
+        #                                 weight_decay=self.weight_decay, momentum=self.momentum)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), self.learning_rate, weight_decay=self.weight_decay)
+        self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.n_epochs)
+        #self.lr_scheduler = PolyLRScheduler(self.optimizer, self.learning_rate, self.n_epochs)
         self.start_epoch = 0
 
         if os.path.exists(self.checkpoint_filename) and not self.force_restart:
