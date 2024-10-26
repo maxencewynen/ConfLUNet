@@ -6,8 +6,8 @@ from scipy.ndimage import label
 from typing import List, Tuple, Dict
 from conflunet.postprocessing.utils import convert_types
 
-METRICS_TO_AVERAGE = ["PQ", "DSC", "nDSC", "F1", "Recall", "Precision", "Dice_Per_TP", "DiC", "Recall_CLU", "Precision_CLU", "Dice_Per_TP_CLU"]
-METRICS_TO_SUM = ["Pred_Lesion_Count", "Ref_Lesion_Count", "CLU_Count", "TP_CLU"]
+METRICS_TO_AVERAGE = ["PQ", "DSC", "nDSC", "F1", "Recall", "Precision", "FPR", "Dice_Per_TP", "DiC", "Recall_CLU", "Precision_CLU", "Dice_Per_TP_CLU"]
+METRICS_TO_SUM = ["TP", "FP", "FN", "Pred_Lesion_Count", "Ref_Lesion_Count", "CLU_Count", "TP_CLU"]
 
 
 def intersection_over_union(pred_mask: np.ndarray, ref_mask: np.ndarray) -> float:

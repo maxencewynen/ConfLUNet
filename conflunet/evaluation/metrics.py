@@ -86,6 +86,19 @@ def compute_metrics(
     f1 = f_beta_score(matched_pairs=matched_pairs, unmatched_pred=unmatched_pred, unmatched_ref=unmatched_ref)
     metrics["F1"] = f1
 
+    TP = len(matched_pairs)
+    FP = len(unmatched_pred)
+    FN = len(unmatched_ref)
+    ref_count = len(np.unique(instance_ref[instance_ref != 0]))
+    pred_count = len(np.unique(instance_pred[instance_pred != 0]))
+    assert ref_count == TP + FN, f"Reference count ({ref_count}) should be equal to TP + FN ({TP + FN})"
+    assert pred_count == TP + FP, f"Predicted count ({pred_count}) should be equal to TP + FP ({TP + FP})"
+
+    metrics["TP"] = TP
+    metrics["FP"] = FP
+    metrics["FN"] = FN
+    metrics["FPR"] = FP / (pred_count + 1e-6)
+
     # Recall and Precision
     recall_val = recall(matched_pairs=matched_pairs, unmatched_ref=unmatched_ref)
     metrics["Recall"] = recall_val
