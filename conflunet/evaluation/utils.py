@@ -1,6 +1,7 @@
 import json
 import numpy as np
 import warnings
+import pandas as pd
 from os.path import join as pjoin
 from scipy.ndimage import label
 from typing import List, Tuple, Dict
@@ -150,12 +151,26 @@ def summarize_metrics_from_model_and_postprocessor(dataset_name, model_name, pos
     from conflunet.postprocessing.utils import convert_types
 
     all_metrics = {}
+    all_pred_matches = []
+    all_ref_matches = []
     for fold in range(5):
         fold_metrics_file = pjoin(save_dir, dataset_name, model_name, f"fold_{fold}", postprocessor_name,
                                   "metrics_summary.json")
         with open(fold_metrics_file, 'r') as f:
             this_fold_metrics = json.load(f)
             all_metrics[f"fold_{fold}"] = this_fold_metrics
+
+        fold_pred_matches_file = pjoin(save_dir, dataset_name, model_name, f"fold_{fold}", postprocessor_name,
+                                       "pred_matches.csv")
+        df_pred_matches = pd.read_csv(fold_pred_matches_file)
+        df_pred_matches["fold"] = fold
+        all_pred_matches.append(df_pred_matches)
+
+        fold_ref_matches_file = pjoin(save_dir, dataset_name, model_name, f"fold_{fold}", postprocessor_name,
+                                      "ref_matches.csv")
+        df_ref_matches = pd.read_csv(fold_ref_matches_file)
+        df_ref_matches["fold"] = fold
+        all_ref_matches.append(df_ref_matches)
 
     metrics_folds_details_file = pjoin(save_dir, dataset_name, model_name, f"metrics_fold_details_{postprocessor_name}.json")
     with open(metrics_folds_details_file, 'w') as f:
@@ -177,6 +192,12 @@ def summarize_metrics_from_model_and_postprocessor(dataset_name, model_name, pos
     with open(metrics_std_file, 'w') as f:
         json.dump(convert_types(metrics_std), f, indent=4)
 
+    df_pred_matches = pd.concat(all_pred_matches)
+    df_pred_matches.to_csv(pjoin(save_dir, dataset_name, model_name, f"pred_lesions_infos_{postprocessor_name}.csv"))
+
+    df_ref_matches = pd.concat(all_ref_matches)
+    df_ref_matches.to_csv(pjoin(save_dir, dataset_name, model_name, f"ref_lesions_infos_{postprocessor_name}.csv"))
+
 
 def save_metrics(
         all_metrics: Dict[str, Dict[str, float]],
@@ -191,10 +212,29 @@ def save_metrics(
     pred_matches_file = pjoin(save_dir, "pred_matches.json")
     with open(pred_matches_file, 'w') as f:
         json.dump(convert_types(all_pred_matches), f, indent=4)
+    # also save as csv
+    df_pred_matches = pd.DataFrame([
+        {"(patient_id, pred_lesion_id)": (patient_id, lesion_id),
+         **{key: patient_data[key][i] for key in patient_data if key != "Lesion_ID"}}
+        for patient_id, patient_data in all_pred_matches.items()
+        for i, lesion_id in enumerate(patient_data["Lesion_ID"])
+    ])
+    df_pred_matches["TP"] = ~df_pred_matches["Ref_Lesion_ID_Match"].isna()
+    df_pred_matches["FP"] = df_pred_matches["Ref_Lesion_ID_Match"].isna()
+    df_pred_matches.to_csv(pjoin(save_dir, "pred_matches.csv"))
 
     ref_matches_file = pjoin(save_dir, "ref_matches.json")
     with open(ref_matches_file, 'w') as f:
         json.dump(convert_types(all_ref_matches), f, indent=4)
+    # also save as csv
+    df_ref_matches = pd.DataFrame([
+        {"(patient_id, ref_lesion_id)": (patient_id, lesion_id),
+         **{key: patient_data[key][i] for key in patient_data if key != "Lesion_ID"}}
+        for patient_id, patient_data in all_pred_matches.items()
+        for i, lesion_id in enumerate(patient_data["Lesion_ID"])
+    ])
+    df_ref_matches["FN"] = df_ref_matches["Pred_Lesion_ID_Match"].isna()
+    df_ref_matches.to_csv(pjoin(save_dir, "ref_matches.csv"))
 
     # compute mean metrics or sum when applicable
     metrics_summary = {}

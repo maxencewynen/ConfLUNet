@@ -145,7 +145,7 @@ def compute_metrics(
     ## Per lesion match & volume information ##
     ###########################################
     all_pred_matches = {"Lesion_ID": [], "Ref_Lesion_ID_Match": [], "Volume_Pred": [], "Volume_Ref": [], "DSC": []}
-    all_ref_matches = {"Lesion_ID": [], "Pred_Lesion_ID_Match": [], "Volume_Ref": [], "Volume_Pred": [], "DSC": []}
+    all_ref_matches = {"Lesion_ID": [], "Pred_Lesion_ID_Match": [], "Volume_Ref": [], "Volume_Pred": [], "DSC": [], "is_confluent": []}
 
     # Store for every predicted lesion the potential match in the reference annotation,
     # along with both lesion volumes
@@ -191,6 +191,7 @@ def compute_metrics(
         all_ref_matches["Volume_Ref"].append(volume_ref * np.prod(voxel_size))
         all_ref_matches["Volume_Pred"].append(volume_pred)
         all_ref_matches["DSC"].append(this_pairs_dsc)
+        all_ref_matches["is_confluent"].append(rid in cl_ids)
 
     return metrics, all_pred_matches, all_ref_matches
 
