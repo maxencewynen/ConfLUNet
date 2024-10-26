@@ -230,7 +230,7 @@ def save_metrics(
     df_ref_matches = pd.DataFrame([
         {"(patient_id, ref_lesion_id)": (patient_id, lesion_id),
          **{key: patient_data[key][i] for key in patient_data if key != "Lesion_ID"}}
-        for patient_id, patient_data in all_pred_matches.items()
+        for patient_id, patient_data in all_ref_matches.items()
         for i, lesion_id in enumerate(patient_data["Lesion_ID"])
     ])
     df_ref_matches["FN"] = df_ref_matches["Pred_Lesion_ID_Match"].isna()
