@@ -193,10 +193,10 @@ def summarize_metrics_from_model_and_postprocessor(dataset_name, model_name, pos
         json.dump(convert_types(metrics_std), f, indent=4)
 
     df_pred_matches = pd.concat(all_pred_matches)
-    df_pred_matches.to_csv(pjoin(save_dir, dataset_name, model_name, f"pred_lesions_infos_{postprocessor_name}.csv"))
+    df_pred_matches.to_csv(pjoin(save_dir, dataset_name, model_name, f"pred_lesions_infos_{postprocessor_name}.csv"), index=False)
 
     df_ref_matches = pd.concat(all_ref_matches)
-    df_ref_matches.to_csv(pjoin(save_dir, dataset_name, model_name, f"ref_lesions_infos_{postprocessor_name}.csv"))
+    df_ref_matches.to_csv(pjoin(save_dir, dataset_name, model_name, f"ref_lesions_infos_{postprocessor_name}.csv"), index=False)
 
 
 def save_metrics(
@@ -221,7 +221,7 @@ def save_metrics(
     ])
     df_pred_matches["TP"] = ~df_pred_matches["Ref_Lesion_ID_Match"].isna()
     df_pred_matches["FP"] = df_pred_matches["Ref_Lesion_ID_Match"].isna()
-    df_pred_matches.to_csv(pjoin(save_dir, "pred_matches.csv"))
+    df_pred_matches.to_csv(pjoin(save_dir, "pred_matches.csv"), index=False)
 
     ref_matches_file = pjoin(save_dir, "ref_matches.json")
     with open(ref_matches_file, 'w') as f:
@@ -234,7 +234,7 @@ def save_metrics(
         for i, lesion_id in enumerate(patient_data["Lesion_ID"])
     ])
     df_ref_matches["FN"] = df_ref_matches["Pred_Lesion_ID_Match"].isna()
-    df_ref_matches.to_csv(pjoin(save_dir, "ref_matches.csv"))
+    df_ref_matches.to_csv(pjoin(save_dir, "ref_matches.csv"), index=False)
 
     # compute mean metrics or sum when applicable
     metrics_summary = {}
