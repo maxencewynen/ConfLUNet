@@ -112,6 +112,13 @@ def preprocess(dataset_id: int,
 
 
 if __name__=='__main__':
-    # folder = "/home/mwynen/data/nnUNet/nnUNet_raw/Dataset321_WMLIS"
-    # verify_dataset_integrity(folder)
-    preprocess(321, check_dataset_integrity=True, num_processes=8, verbose=True)
+    import argparse
+    parser = argparse.ArgumentParser(description="Preprocess dataset.")
+    parser.add_argument("--dataset_id", required=True, type=int, help="ID of the dataset to preprocess.")
+    parser.add_argument("--check_dataset_integrity", action="store_true", help="Check dataset integrity.")
+    parser.add_argument("--num_processes", type=int, default=default_num_processes, help="Number of processes to use.")
+    parser.add_argument("--overwrite_existing_dataset_fingerprint", action="store_true",
+                        help="Overwrite existing dataset fingerprint.")
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args()
+    preprocess(args.dataset_id, args.check_dataset_integrity, args.num_processes, args.overwrite_existing_dataset_fingerprint, args.verbose)
