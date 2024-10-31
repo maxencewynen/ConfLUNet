@@ -33,7 +33,7 @@ class WeightedSemanticSegmentationLoss(Callable):
         dilated_ref = []
         for b in range(reference.shape[0]):
             dilated_ref.append(binary_dilation(reference[b].cpu().numpy()))
-        reference = torch.from_numpy(np.stack(dilated_ref)).to(prediction.device)
+        reference = torch.from_numpy(np.stack(dilated_ref).astype(int)).to(prediction.device)
         # Dice loss
         dice_loss = self.loss_function_dice(prediction, reference)
         
