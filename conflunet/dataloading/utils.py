@@ -119,12 +119,8 @@ def get_train_transforms(seed: Union[int, None] = None,
                          get_confluent_instances=False,
                          ) -> Compose:
     additional_keys = []
-    if get_small_instances and get_confluent_instances:
-        additional_keys.append('small_objects_and_confluent_instances_classes')
-    elif get_small_instances:
-        additional_keys.append('small_object_classes')
-    elif get_confluent_instances:
-        additional_keys.append('confluent_instances')
+    if get_small_instances or get_confluent_instances:
+        additional_keys.append('weights')
 
     transform_list = [
         CustomLoadNPZInstanced(keys=['data'], get_small_instances=get_small_instances, get_confluent_instances=get_confluent_instances),

@@ -15,8 +15,7 @@ class WeightedSemanticSegmentationLoss(Callable):
         super(WeightedSemanticSegmentationLoss, self).__init__()
         self.loss_function_dice = DiceLoss(to_onehot_y=True,
                                            softmax=True, sigmoid=False,
-                                           include_background=False,
-                                           reduction='none')
+                                           include_background=False)
         self.ce_loss = CrossEntropyLoss(reduction='none')
         self.dice_loss_weight = dice_loss_weight
         self.focal_loss_weight = focal_loss_weight
@@ -30,16 +29,13 @@ class WeightedSemanticSegmentationLoss(Callable):
     ):
         # Dice loss
         dice_loss = self.loss_function_dice(prediction, reference)
-        if weights is not None:
-            dice_loss *= weights
-        dice_loss = torch.mean(dice_loss)
-
+        
         # Focal loss
         ce = self.ce_loss(prediction, torch.squeeze(reference, dim=1))
         pt = torch.exp(-ce)
         loss2 = (1 - pt) ** self.gamma * ce
         if weights is not None:
-            loss2 *= weights
+            loss2 *= torch.squeeze(weights, dim=1)
         focal_loss = torch.mean(loss2)
 
         # Combine losses
@@ -152,13 +148,17 @@ class ConfLUNetLoss(WeightedConfLUNetLoss):
             semantic_ref: torch.Tensor,
             center_heatmap_ref: torch.Tensor,
             offsets_ref: torch.Tensor,
+            semantic_weights: torch.Tensor = None,
             offsets_weights: torch.Tensor = None,
             centers_weights: torch.Tensor = None,
     ):
+        if semantic_weights is not None:
+            warnings.warn("ConfLUNetLoss does not support semantic_weights. Ignoring them.")
         if offsets_weights is not None:
             warnings.warn("ConfLUNetLoss does not support offsets_weights. Ignoring them.")
         if centers_weights is not None:
             warnings.warn("ConfLUNetLoss does not support centers_weights. Ignoring them.")
         return super(ConfLUNetLoss, self).__call__(semantic_pred, center_heatmap_pred, offsets_pred,
                                                    semantic_ref, center_heatmap_ref, offsets_ref,
-                                                   offsets_weights=None, centers_weights=None)
+                                                   semantic_weights=None, offsets_weights=None, 
+                                                   centers_weights=None)
