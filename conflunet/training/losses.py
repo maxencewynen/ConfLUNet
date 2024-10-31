@@ -47,7 +47,7 @@ class WeightedSemanticSegmentationLoss(Callable):
         return segmentation_loss, dice_loss, focal_loss
 
 
-class SemanticSegmentationLoss(Callable):
+class SemanticSegmentationLoss(WeightedSemanticSegmentationLoss):
     def __init__(
             self,
             dice_loss_weight: float = 0.5,
@@ -61,7 +61,8 @@ class SemanticSegmentationLoss(Callable):
     def __call__(
             self,
             prediction: torch.Tensor,
-            reference: torch.Tensor
+            reference: torch.Tensor,
+            weights: torch.Tensor = None
     ):
         return super(SemanticSegmentationLoss, self).__call__(prediction, reference, weights=None)
 

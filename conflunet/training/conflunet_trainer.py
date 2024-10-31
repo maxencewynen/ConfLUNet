@@ -102,7 +102,7 @@ class ConfLUNetTrainer(TrainingPipeline):
         labels = batch_data["seg"].type(torch.LongTensor).to(self.device)
         center_heatmap = batch_data["center_heatmap"].to(self.device)
         offsets = batch_data["offsets"].to(self.device)
-        weights = batch_data["weights"].to(self.device)
+        weights = batch_data["weights"].to(self.device) if "weights" in batch_data else None
         return inputs, (labels, center_heatmap, offsets, weights)
 
     def get_loss_functions(self) -> Callable:
