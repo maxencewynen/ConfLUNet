@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 from torch.nn import L1Loss, MSELoss, CrossEntropyLoss
 from typing import Callable
-from monai.losses import DiceLoss, MaskedDiceLoss
+from monai.losses import DiceLoss
 from scipy.ndimage import binary_dilation
 
 
@@ -15,9 +15,9 @@ class WeightedSemanticSegmentationLoss(Callable):
             gamma: float = 2.0
     ):
         super(WeightedSemanticSegmentationLoss, self).__init__()
-        self.loss_function_dice = MaskedDiceLoss(to_onehot_y=True,
-                                                 softmax=True, sigmoid=False,
-                                                 include_background=False)
+        self.loss_function_dice = DiceLoss(to_onehot_y=True,
+                                           softmax=True, sigmoid=False,
+                                           include_background=False)
         self.ce_loss = CrossEntropyLoss(reduction='none')
         self.dice_loss_weight = dice_loss_weight
         self.focal_loss_weight = focal_loss_weight
@@ -38,7 +38,7 @@ class WeightedSemanticSegmentationLoss(Callable):
         mask = 1 - external_borders
 
         # dice loss
-        dice_loss = self.loss_function_dice(prediction, reference, mask)   # supervise everything except external borders
+        dice_loss = self.loss_function_dice(prediction * mask, reference)   # supervise everything except external borders
         
         # Focal loss
         ce = self.ce_loss(prediction, torch.squeeze(reference, dim=1))
