@@ -48,7 +48,9 @@ class TrainingPipeline:
                  momentum=0.99,
                  semantic: bool = False,
                  predictors: List[Predictor] = None,
-                 metrics_to_track: Dict[str, Tuple[Callable, bool]] = None
+                 metrics_to_track: Dict[str, Tuple[Callable, bool]] = None,
+                 get_small_instances: bool = False,
+                 get_confluent_instances: bool = False
                  ):
         self.dataset_id = dataset_id
         self.fold = fold
@@ -72,6 +74,8 @@ class TrainingPipeline:
         self.semantic = semantic
         self.predictors = predictors
         self.metrics_to_track = metrics_to_track
+        self.get_small_instances = get_small_instances
+        self.get_confluent_instances = get_confluent_instances
         self.save_dir = self.full_validation_save_dir = self.patches_save_dir = None
         self.model = None
         self.optimizer = None
@@ -123,7 +127,9 @@ class TrainingPipeline:
         train_loader = get_train_dataloader_from_dataset_id_and_fold(self.dataset_id, self.fold,
                                                                      num_workers=self.num_workers,
                                                                      cache_rate=self.cache_rate,
-                                                                     seed_val=self.seed_val)
+                                                                     seed_val=self.seed_val,
+                                                                     get_small_instances=self.get_small_instances,
+                                                                     get_confluent_instances=self.get_confluent_instances)
 
         if self.debug:
             val_loader = [next(iter(train_loader))]

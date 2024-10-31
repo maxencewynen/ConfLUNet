@@ -22,6 +22,8 @@ if __name__ == '__main__':
     parser.add_argument('--heatmap_loss_weight', type=float, default=1, help='Specify the weight of the heatmap loss')
     parser.add_argument('--offsets_loss_weight', type=float, default=1, help='Specify the weight of the offsets loss')
     parser.add_argument('--offsets_loss', type=str, default="l1", help="Specify the loss used for the offsets. ('sl1' or 'l1')")
+    parser.add_argument('--get_small_instances', default=False, action='store_true', help="Whether to use a weighted loss for small instances")
+    parser.add_argument('--get_confluent_instances', default=False, action='store_true', help="Whether to use a weighted loss for confluent instances")
     parser.add_argument('--learning_rate', type=float, default=1e-2, help='Specify the initial learning rate')
     parser.add_argument('--n_epochs', type=int, default=1500, help='Specify the number of epochs to train for')
     parser.add_argument('--seed', type=int, default=1, help='Specify the global random seed')

@@ -28,6 +28,8 @@ class SemanticTrainer(TrainingPipeline):
                  force_restart: bool = False,
                  debug: bool = False,
                  save_predictions: bool = False,
+                 get_small_instances: bool = False,
+                 get_confluent_instances: bool = False
                  ):
         super().__init__(dataset_id=dataset_id,
                          fold=fold,
@@ -46,7 +48,9 @@ class SemanticTrainer(TrainingPipeline):
                          force_restart=force_restart,
                          debug=debug,
                          save_predictions=save_predictions,
-                         semantic=True)
+                         semantic=True,
+                         get_small_instances=get_small_instances,
+                         get_confluent_instances=get_confluent_instances)
 
         self.predictors = [
             SemanticPredictor(

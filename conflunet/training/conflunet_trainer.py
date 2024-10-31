@@ -4,7 +4,7 @@ from typing import Tuple, Callable, Union
 from torch.nn import SmoothL1Loss, L1Loss
 
 from conflunet.postprocessing.instance import ConfLUNetPostprocessor
-from conflunet.training.losses import ConfLUNetLoss, SemanticSegmentationLoss
+from conflunet.training.losses import ConfLUNetLoss, SemanticSegmentationLoss, WeightedConfLUNetLoss
 from conflunet.training.trainer import TrainingPipeline
 from conflunet.training.utils import save_patch
 from conflunet.inference.predictors.instance import ConfLUNetPredictor
@@ -33,6 +33,8 @@ class ConfLUNetTrainer(TrainingPipeline):
                  force_restart: bool = False,
                  debug: bool = False,
                  save_predictions: bool = False,
+                 get_small_instances: bool = False,
+                 get_confluent_instances: bool = False
                  ):
         self.seg_loss_weight = seg_loss_weight
         self.heatmap_loss_weight = heatmap_loss_weight
@@ -62,7 +64,9 @@ class ConfLUNetTrainer(TrainingPipeline):
                          force_restart=force_restart,
                          debug=debug,
                          save_predictions=save_predictions,
-                         semantic=False)
+                         semantic=False,
+                         get_small_instances=get_small_instances,
+                         get_confluent_instances=get_confluent_instances)
 
         self.predictors = ConfLUNetPredictor(
             plans_manager=self.plans_manager,
@@ -98,10 +102,11 @@ class ConfLUNetTrainer(TrainingPipeline):
         labels = batch_data["seg"].type(torch.LongTensor).to(self.device)
         center_heatmap = batch_data["center_heatmap"].to(self.device)
         offsets = batch_data["offsets"].to(self.device)
-        return inputs, (labels, center_heatmap, offsets)
+        weights = batch_data["weights"].to(self.device)
+        return inputs, (labels, center_heatmap, offsets, weights)
 
     def get_loss_functions(self) -> Callable:
-        return ConfLUNetLoss(
+        return WeightedConfLUNetLoss(
             segmentation_loss_weight=self.seg_loss_weight,
             offsets_loss_weight=self.offsets_loss_weight,
             center_heatmap_loss_weight=self.heatmap_loss_weight,
@@ -115,7 +120,7 @@ class ConfLUNetTrainer(TrainingPipeline):
     def compute_loss(self, model_outputs: Tuple[torch.Tensor], outputs: Tuple[torch.Tensor]) -> Tuple[
         torch.Tensor, torch.Tensor]:
         seg_pred, center_heatmap_pred, offsets_pred = model_outputs
-        semantic_ref, center_heatmap_ref, offsets_ref = outputs
+        semantic_ref, center_heatmap_ref, offsets_ref, weights = outputs  # cf prepare_batch
 
         return self.loss_fn(
             semantic_pred=seg_pred,
@@ -123,7 +128,10 @@ class ConfLUNetTrainer(TrainingPipeline):
             offsets_pred=offsets_pred,
             semantic_ref=semantic_ref,
             center_heatmap_ref=center_heatmap_ref,
-            offsets_ref=offsets_ref
+            offsets_ref=offsets_ref,
+            semantic_weights=weights,
+            offsets_weights=weights,
+            centers_weights=weights,
         )
 
     def save_train_patch_debug(self, batch_inputs: Tuple[torch.Tensor, torch.Tensor],

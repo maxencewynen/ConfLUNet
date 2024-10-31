@@ -20,12 +20,16 @@ def get_train_dataloader(folder: str,
                          minimum_size_along_axis=3,
                          num_workers=0,
                          cache_rate=1.0,
-                         seed_val=1) -> monai.data.DataLoader:
+                         seed_val=1,
+                         get_small_instances=False,
+                         get_confluent_instances=False) -> monai.data.DataLoader:
     train_transforms = get_train_transforms(seed=seed_val, patch_size=patch_size,
                                             remove_small_instances=remove_small_instances,
                                             voxel_size=voxel_size,
                                             minimum_instance_size=minimum_instance_size,
-                                            minimum_size_along_axis=minimum_size_along_axis)
+                                            minimum_size_along_axis=minimum_size_along_axis,
+                                            get_small_instances=get_small_instances,
+                                            get_confluent_instances=get_confluent_instances)
     ds = LesionInstancesDataset(folder, case_identifiers,
                                 transforms=train_transforms,
                                 cache_rate=cache_rate)
@@ -97,7 +101,9 @@ def get_train_dataloader_from_dataset_id_and_fold(
         fold: int = None,
         num_workers: int =0,
         cache_rate: float =1.0,
-        seed_val: int =1) -> monai.data.DataLoader:
+        seed_val: int =1,
+        get_small_instances=False,
+        get_confluent_instances=False) -> monai.data.DataLoader:
     dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(dataset_id)
     # TODO: handle case when dataset is not preprocessed
     preprocessed_dataset_folder = join(nnUNet_preprocessed, dataset_name)
@@ -110,7 +116,8 @@ def get_train_dataloader_from_dataset_id_and_fold(
 
     return get_train_dataloader(preprocessed_data_folder,
                                 case_identifiers=tr_keys, patch_size=patch_size, batch_size=batch_size,
-                                num_workers=num_workers, cache_rate=cache_rate, seed_val=seed_val)
+                                num_workers=num_workers, cache_rate=cache_rate, seed_val=seed_val,
+                                get_small_instances=get_small_instances, get_confluent_instances=get_confluent_instances)
 
 
 def get_val_dataloader_from_dataset_id_and_fold(

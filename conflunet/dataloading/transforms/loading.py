@@ -8,13 +8,16 @@ from scipy.ndimage import center_of_mass
 
 
 class CustomLoadNPZInstanced(MapTransform):
-    def __init__(self, keys: KeysCollection, test=False, allow_missing_keys=False):
+    def __init__(self, keys: KeysCollection, test=False, get_small_instances=False,
+                 get_confluent_instances=False, allow_missing_keys=False):
         super().__init__(keys)
         if type(keys) == list and len(keys) > 1:
             raise Exception("This transform should only be used with 1 key.")
         self.keys = keys
         self.allow_missing_keys = allow_missing_keys
         self.test = test
+        self.get_small_instances = get_small_instances
+        self.get_confluent_instances = get_confluent_instances
 
     def __call__(self, data):
         d = dict(data)
@@ -31,16 +34,24 @@ class CustomLoadNPZInstanced(MapTransform):
                 # Notice the >= instead of >, as nnUNet preprocessing makes the actual background to be =-1
                 d['brainmask'] = (array['seg'] >= 0).astype(np.float32)
 
-                if 'center_heatmap' in d.keys():
-                    d['center_heatmap'] = d['center_heatmap'].astype(np.float32)
-
-                if 'small_objects_and_confluent_instances_classes' in d.keys():
-                    d['small_objects_and_confluent_instances_classes'] = \
-                        d['small_objects_and_confluent_instances_classes'].astype(np.float32)
-                if 'small_object_classes' in d.keys():
-                    d['small_object_classes'] = d['small_object_classes'].astype(np.float32)
-                if 'confluent_instances' in d.keys():
-                    d['confluent_instances'] = d['confluent_instances'].astype(np.float32)
+                # if 'center_heatmap' in d.keys():
+                #     d['center_heatmap'] = d['center_heatmap'].astype(np.float32)
+                if (self.get_small_instances and self.get_confluent_instances and
+                        'small_objects_and_confluent_instances_classes' in array.keys()):
+                    weights = array['small_objects_and_confluent_instances_classes'].astype(np.float32)
+                    weights[weights == 1] = 1  # large, not confluent
+                    weights[weights == 2] = 3  # large, confluent
+                    weights[weights == 3] = 3  # small, not confluent
+                    weights[weights == 4] = 3  # small, confluent
+                    d['weights'] = weights
+                elif self.get_small_instances and 'small_object_classes' in array.keys():
+                    weights = array['small_object_classes'].astype(np.float32)
+                    weights[weights == 2] = 3  # small
+                    d['weights'] = weights
+                elif self.get_confluent_instances and 'confluent_instances' in array.keys():
+                    weights = array['confluent_instances'].astype(np.float32)
+                    weights[weights == 2] = 1  # confluent
+                    d['weights'] = weights
             elif 'seg' in d.keys():
                 d['brainmask'] = (d['seg'] >= 0).astype(np.float32)
             elif 'brainmask' in d.keys():

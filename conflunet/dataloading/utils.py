@@ -114,27 +114,37 @@ def get_train_transforms(seed: Union[int, None] = None,
                          remove_small_instances: bool = False,
                          voxel_size: Tuple = (1, 1, 1),
                          minimum_instance_size: int = 14,
-                         minimum_size_along_axis: int = 3
+                         minimum_size_along_axis: int = 3,
+                         get_small_instances=False,
+                         get_confluent_instances=False,
                          ) -> Compose:
+    additional_keys = []
+    if get_small_instances and get_confluent_instances:
+        additional_keys.append('small_objects_and_confluent_instances_classes')
+    elif get_small_instances:
+        additional_keys.append('small_object_classes')
+    elif get_confluent_instances:
+        additional_keys.append('confluent_instances')
+
     transform_list = [
-        CustomLoadNPZInstanced(keys=['data']),
+        CustomLoadNPZInstanced(keys=['data'], get_small_instances=get_small_instances, get_confluent_instances=get_confluent_instances),
         FgBgToIndicesd(keys=['seg']),
         # # Crop random fixed sized regions with the center being a foreground or background voxel
         # # based on the Pos Neg Ratio.
-        RandCropByPosNegLabeld(keys=['img', 'seg', 'instance_seg', 'brainmask'],
+        RandCropByPosNegLabeld(keys=['img', 'seg', 'instance_seg', 'brainmask'] + additional_keys,
                                label_key="seg",
                                fg_indices_key="seg_fg_indices",
                                bg_indices_key="seg_bg_indices",
                                spatial_size=patch_size, num_samples=1,
                                pos=1, neg=1),
-        *get_nnunet_spatial_transforms(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask'],
+        *get_nnunet_spatial_transforms(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask'] + additional_keys,
             spatial_size=patch_size),
         # RandSpatialCropd(keys=['img', 'seg', 'instance_seg', 'brainmask'],
         #                  roi_size=patch_size,
         #                  random_center=False, random_size=False),
-        *get_nnunet_augmentations(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask']),
+        *get_nnunet_augmentations(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask'] + additional_keys),
         LesionOffsetTransformd(keys="instance_seg"),
-        ToTensord(keys=['img', 'seg', 'offsets', 'center_heatmap', 'brainmask']),
+        ToTensord(keys=['img', 'seg', 'offsets', 'center_heatmap', 'brainmask'] + additional_keys),
         DeleteKeysd(keys=['properties']),
     ]
     if remove_small_instances:
