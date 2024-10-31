@@ -3,6 +3,7 @@ import warnings
 from torch.nn import L1Loss, MSELoss, CrossEntropyLoss
 from typing import Callable
 from monai.losses import DiceLoss
+from scipy.ndimage import binary_dilation
 
 
 class WeightedSemanticSegmentationLoss(Callable):
@@ -27,6 +28,11 @@ class WeightedSemanticSegmentationLoss(Callable):
             reference: torch.Tensor,
             weights: torch.Tensor = None
     ):
+        # Dilate reference to avoid border effects
+        dilated_ref = []
+        for b in range(reference.shape[0]):
+            dilated_ref.append(binary_dilation(reference[b]))
+        reference = torch.stack(dilated_ref)
         # Dice loss
         dice_loss = self.loss_function_dice(prediction, reference)
         
