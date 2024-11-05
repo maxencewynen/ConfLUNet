@@ -3,7 +3,7 @@ import time
 import numpy as np
 from typing import Tuple, Dict, List
 
-from conflunet.evaluation.utils import match_instances
+from conflunet.evaluation.utils import match_instances, find_tierx_confluent_instances
 from conflunet.evaluation.utils import find_confluent_lesions
 from conflunet.evaluation.semantic_segmentation import dice_metric, dice_norm_metric
 from conflunet.evaluation.instance_segmentation import panoptic_quality, dice_per_tp
@@ -55,7 +55,9 @@ def compute_metrics(
     ###########################################
     metrics = {}
     vprint(verbose, f"[INFO] Matching instances...")
-    matched_pairs, unmatched_pred, unmatched_ref = match_instances(instance_pred, instance_ref)
+    matched_pairs_iou, unmatched_pred, unmatched_ref = match_instances(instance_pred, instance_ref, return_iou=True)
+    matched_pairs = [(pred_id, ref_id) for pred_id, ref_id, iou in matched_pairs_iou]
+    matched_pairs_iou = {(p, r): iou for p, r, iou in matched_pairs_iou}
     vprint(verbose, f"[INFO] Found {len(matched_pairs)} matched pairs, {len(unmatched_pred)} unmatched predicted instances, "
                     f"and {len(unmatched_ref)} unmatched reference instances.")
 
@@ -111,41 +113,49 @@ def compute_metrics(
     metrics["Ref_Lesion_Count"] = ref_lesion_count(instance_ref)
     metrics["DiC"] = DiC(instance_pred, instance_ref)
 
-    vprint(verbose, f"[INFO] Computing confluent lesion units metrics...")
-    ### Confluent lesions Metrics ###
-    confluents_instance_ref = np.copy(instance_ref)
-    cl_ids = find_confluent_lesions(confluents_instance_ref)
+    cl_ids_tier0 = find_confluent_lesions(instance_ref)
+    cl_ids_tier1 = find_tierx_confluent_instances(instance_ref, tier=1)
+    cl_ids_tier2 = find_tierx_confluent_instances(instance_ref, tier=2)
+    cl_ids_per_tier = {0: cl_ids_tier0, 1: cl_ids_tier1, 2: cl_ids_tier2}
 
-    # set all other ids to 0 in instance_ref
-    for id in np.unique(confluents_instance_ref):
-        if id not in cl_ids:
-            confluents_instance_ref[confluents_instance_ref == id] = 0
+    for tier in (0, 1, 2):
+        vprint(verbose, f"[INFO] Computing confluent lesion units (tier {tier} metrics...")
+        ### Confluent lesions Metrics ###
+        confluents_instance_ref = np.copy(instance_ref)
+        cl_ids = cl_ids_per_tier[tier]
 
-    matched_pairs_cl, unmatched_pred_cl, unmatched_ref_cl = match_instances(instance_pred, confluents_instance_ref)
+        # set all other ids to 0 in instance_ref
+        for id in np.unique(confluents_instance_ref):
+            if id not in cl_ids:
+                confluents_instance_ref[confluents_instance_ref == id] = 0
 
-    clm = len(cl_ids)
-    metrics["CLU_Count"] = clm
-    if clm == 0:
-        metrics["Recall_CLU"] = np.nan
-        metrics["Precision_CLU"] = np.nan
-        metrics["Dice_Per_TP_CLU"] = np.nan
-        metrics["TP_CLU"] = np.nan
-    else:
-        clr = recall(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
-        clp = precision(matched_pairs=matched_pairs_cl, unmatched_pred=unmatched_pred_cl)
-        metrics['TP_CLU'] = len(matched_pairs_cl)
-        metrics["Recall_CLU"] = clr
-        metrics["Precision_CLU"] = clp
+        matched_pairs_cl, unmatched_pred_cl, unmatched_ref_cl = match_instances(instance_pred, confluents_instance_ref)
 
-        dice_scores_cl = dice_per_tp(instance_pred, confluents_instance_ref, matched_pairs_cl)
-        avg_dice_cl = sum(dice_scores_cl) / len(dice_scores_cl) if dice_scores_cl else 0
-        metrics["Dice_Per_TP_CLU"] = avg_dice_cl
+        clm = len(cl_ids)
+        added_string = f"_tier_{tier}" if tier > 0 else ""
+        metrics["CLU_Count"+added_string] = clm
+        if clm == 0:
+            metrics["Recall_CLU"+added_string] = np.nan
+            metrics["Precision_CLU"+added_string] = np.nan
+            metrics["Dice_Per_TP_CLU"+added_string] = np.nan
+            metrics["TP_CLU"+added_string] = np.nan
+        else:
+            clr = recall(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
+            clp = precision(matched_pairs=matched_pairs_cl, unmatched_pred=unmatched_pred_cl)
+            metrics['TP_CLU'+added_string] = len(matched_pairs_cl)
+            metrics["Recall_CLU"+added_string] = clr
+            metrics["Precision_CLU"+added_string] = clp
+
+            dice_scores_cl = dice_per_tp(instance_pred, confluents_instance_ref, matched_pairs_cl)
+            avg_dice_cl = sum(dice_scores_cl) / len(dice_scores_cl) if dice_scores_cl else 0
+            metrics["Dice_Per_TP_CLU"+added_string] = avg_dice_cl
 
     ###########################################
     ## Per lesion match & volume information ##
     ###########################################
-    all_pred_matches = {"Lesion_ID": [], "Ref_Lesion_ID_Match": [], "Volume_Pred": [], "Volume_Ref": [], "DSC": []}
-    all_ref_matches = {"Lesion_ID": [], "Pred_Lesion_ID_Match": [], "Volume_Ref": [], "Volume_Pred": [], "DSC": [], "is_confluent": []}
+    all_pred_matches = {"Lesion_ID": [], "Ref_Lesion_ID_Match": [], "Volume_Pred": [], "Volume_Ref": [], "DSC": [], "IoU": []}
+    all_ref_matches = {"Lesion_ID": [], "Pred_Lesion_ID_Match": [], "Volume_Ref": [], "Volume_Pred": [], "DSC": [], "IoU": [],
+                       "is_confluent": [], "is_confluent_tier1": [], "is_confluents_tier2": []}
 
     # Store for every predicted lesion the potential match in the reference annotation,
     # along with both lesion volumes
@@ -160,15 +170,18 @@ def compute_metrics(
             volume_ref = sum((instance_ref[instance_ref == matched_ref_id] > 0).astype(np.uint8))
             volume_ref *= np.prod(voxel_size)
             this_pairs_dsc = dice_scores[matched_pairs.index((pid, matched_ref_id))]
+            iou = matched_pairs_iou[(pid, matched_ref_id)]
         else:
             matched_ref_id = None
             volume_ref = None
             this_pairs_dsc = None
+            iou = None
 
         all_pred_matches["Ref_Lesion_ID_Match"].append(matched_ref_id)
         all_pred_matches["Volume_Pred"].append(volume_pred * np.prod(voxel_size))
         all_pred_matches["Volume_Ref"].append(volume_ref)
         all_pred_matches["DSC"].append(this_pairs_dsc)
+        all_pred_matches["IoU"].append(iou)
 
     # Store for every lesion in the reference annotation the potential match in the predicted instance map,
     # along with both lesion volumes
@@ -182,16 +195,21 @@ def compute_metrics(
             volume_pred = sum((instance_pred[instance_pred == matched_pred_id] > 0).astype(np.uint8))
             volume_pred *= np.prod(voxel_size)
             this_pairs_dsc = dice_scores[matched_pairs.index((matched_pred_id, rid))]
+            iou = matched_pairs_iou[(matched_pred_id, rid)]
         else:
             matched_pred_id = None
             volume_pred = None
             this_pairs_dsc = None
+            iou = None
 
         all_ref_matches["Pred_Lesion_ID_Match"].append(matched_pred_id)
         all_ref_matches["Volume_Ref"].append(volume_ref * np.prod(voxel_size))
         all_ref_matches["Volume_Pred"].append(volume_pred)
         all_ref_matches["DSC"].append(this_pairs_dsc)
-        all_ref_matches["is_confluent"].append(rid in cl_ids)
+        all_ref_matches["IoU"].append(iou)
+        all_ref_matches["is_confluent"].append(rid in cl_ids_tier0)
+        all_ref_matches["is_confluent_tier1"].append(rid in cl_ids_tier1)
+        all_ref_matches["is_confluents_tier2"].append(rid in cl_ids_tier2)
 
     return metrics, all_pred_matches, all_ref_matches
 
