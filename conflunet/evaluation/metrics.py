@@ -155,7 +155,7 @@ def compute_metrics(
     ###########################################
     all_pred_matches = {"Lesion_ID": [], "Ref_Lesion_ID_Match": [], "Volume_Pred": [], "Volume_Ref": [], "DSC": [], "IoU": []}
     all_ref_matches = {"Lesion_ID": [], "Pred_Lesion_ID_Match": [], "Volume_Ref": [], "Volume_Pred": [], "DSC": [], "IoU": [],
-                       "is_confluent": [], "is_confluent_tier1": [], "is_confluents_tier2": []}
+                       "is_confluent": [], "is_confluent_tier1": [], "is_confluent_tier2": []}
 
     # Store for every predicted lesion the potential match in the reference annotation,
     # along with both lesion volumes
