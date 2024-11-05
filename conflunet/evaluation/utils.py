@@ -9,11 +9,11 @@ from conflunet.postprocessing.utils import convert_types
 
 METRICS_TO_AVERAGE = ["PQ", "DSC", "nDSC", "F1", "Recall", "Precision", "FPR", "Dice_Per_TP", "DiC", "Recall_CLU", "Precision_CLU", "Dice_Per_TP_CLU"]
 METRICS_TO_AVERAGE += [f"{metric}_tier_1" for metric in METRICS_TO_AVERAGE if "CLU" in metric]
-METRICS_TO_AVERAGE += [f"{metric}_tier_2" for metric in METRICS_TO_AVERAGE if "CLU" in metric]
+METRICS_TO_AVERAGE += [f"{metric}_tier_2" for metric in METRICS_TO_AVERAGE if "CLU" in metric and "tier_1" not in metric]
 
 METRICS_TO_SUM = ["TP", "FP", "FN", "Pred_Lesion_Count", "Ref_Lesion_Count", "CLU_Count", "TP_CLU"]
 METRICS_TO_SUM += [f"{metric}_tier_1" for metric in METRICS_TO_SUM if "CLU" in metric]
-METRICS_TO_SUM += [f"{metric}_tier_2" for metric in METRICS_TO_SUM if "CLU" in metric]
+METRICS_TO_SUM += [f"{metric}_tier_2" for metric in METRICS_TO_SUM if "CLU" in metric and "tier_1" not in metric]
 
 
 def intersection_over_union(pred_mask: np.ndarray, ref_mask: np.ndarray) -> float:
