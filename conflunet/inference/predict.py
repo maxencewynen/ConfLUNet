@@ -118,7 +118,7 @@ def predict_fold(
             plans_manager=plans_manager,
             model=model,
             postprocessor=ConfLUNetPostprocessor(
-                minimum_instance_size=0,
+                minimum_instance_size=10,
                 minimum_size_along_axis=0,
                 voxel_spacing=configuration.spacing,
                 semantic_threshold=0.5,
@@ -185,7 +185,7 @@ def predict_all_folds(
     if semantic:
         postprocessors = [
             ConnectedComponentsPostprocessor(
-                minimum_instance_size=0,
+                minimum_instance_size=10,
                 minimum_size_along_axis=0,
                 voxel_spacing=configuration.spacing,
                 semantic_threshold=0.5,
@@ -193,7 +193,7 @@ def predict_all_folds(
                 verbose=False
             ),
             ACLSPostprocessor(
-                minimum_instance_size=0,
+                minimum_instance_size=10,
                 minimum_size_along_axis=0,
                 voxel_spacing=configuration.spacing,
                 semantic_threshold=0.5,

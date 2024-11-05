@@ -208,7 +208,7 @@ def compute_metrics(
         all_ref_matches["DSC"].append(this_pairs_dsc)
         all_ref_matches["IoU"].append(iou)
         all_ref_matches["is_confluent"].append(rid in cl_ids_tier0)
-        all_ref_matches["is_confluent_tier1"].append(rid in cl_ids_tier1)
+        all_ref_matches["is_confluent_tier_1"].append(rid in cl_ids_tier1)
         all_ref_matches["is_confluents_tier2"].append(rid in cl_ids_tier2)
 
     return metrics, all_pred_matches, all_ref_matches
