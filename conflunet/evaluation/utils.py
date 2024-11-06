@@ -64,7 +64,7 @@ def find_confluent_instances(instance_segmentation: np.ndarray):
     :param instance_segmentation:
     :return: list of instance ids that are a unit of a confluent lesion
     """
-    return find_tierx_confluent_instances(instance_segmentation, tier=1)
+    return find_tierx_confluent_instances(instance_segmentation, tier=0)
 
 
 def find_confluent_lesions(instance_segmentation):
