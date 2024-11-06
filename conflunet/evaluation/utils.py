@@ -40,7 +40,10 @@ def find_tierx_confluent_instances(instance_segmentation: np.ndarray, tier: int 
     binary_segmentation = np.copy(instance_segmentation)
     binary_segmentation[binary_segmentation > 0] = 1
     binary_segmentation = binary_segmentation.astype(np.bool_)
-    binary_segmentation_dilated = binary_dilation(binary_segmentation, iterations=tier)
+    if tier == 0:
+        binary_segmentation_dilated = binary_segmentation
+    else:
+        binary_segmentation_dilated = binary_dilation(binary_segmentation, iterations=tier)
 
     connected_components_dilated, num_connected_components_dilated = label(binary_segmentation_dilated)
 
