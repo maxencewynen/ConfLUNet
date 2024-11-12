@@ -15,6 +15,8 @@ import multiprocessing
 import shutil
 from time import sleep
 from typing import Tuple, Union
+from wave import Error
+
 from conflunet.preprocessing.utils import crop_to_nonzero, create_center_heatmap_from_instance_seg, \
     get_confluent_instances_classes, get_small_object_classes, merge_maps
 
@@ -29,16 +31,19 @@ from nnunetv2.preprocessing.resampling.default_resampling import compute_new_sha
 from nnunetv2.utilities.dataset_name_id_conversion import maybe_convert_to_dataset_name
 from nnunetv2.utilities.find_class_by_name import recursive_find_python_class
 from nnunetv2.utilities.plans_handling.plans_handler import PlansManager, ConfigurationManager
-from nnunetv2.utilities.utils import get_filenames_of_train_images_and_targets
+from nnunetv2.utilities.utils import get_filenames_of_train_images_and_targets, get_identifiers_from_splitted_dataset_folder, \
+    create_lists_from_splitted_dataset_folder
 
 
 class InstanceSegProcessor(DefaultPreprocessor):
     def __init__(self, verbose: bool = True,
+                 inference : bool = False,
                  add_center_heatmap_in_npz: bool = True,
                  center_heatmap_sigma: int = 2,
                  add_small_object_classes_in_npz: bool = False,
                  small_objects_thresholds: int = 100,
                  add_confluent_instances_in_npz: bool = False,
+                 output_dir_for_inference: str = None
                  ):
         """
         :param verbose:
@@ -51,11 +56,18 @@ class InstanceSegProcessor(DefaultPreprocessor):
             (label = 1 if the lesion is not confluent, 2 if it is confluent and 0 if it is not a lesion)
         """
         super(InstanceSegProcessor, self).__init__(verbose)
-        self.add_center_heatmap_in_npz = add_center_heatmap_in_npz
+        self.inference = inference
+        self.add_center_heatmap_in_npz = add_center_heatmap_in_npz if not self.inference else False
         self.center_heatmap_sigma = center_heatmap_sigma
-        self.add_small_object_classes_in_npz = add_small_object_classes_in_npz
+        self.add_small_object_classes_in_npz = add_small_object_classes_in_npz if not self.inference else False
         self.small_objects_thresholds = small_objects_thresholds
-        self.add_confluent_instances_in_npz = add_confluent_instances_in_npz
+        self.add_confluent_instances_in_npz = add_confluent_instances_in_npz if not self.inference else False
+        self.output_dir_for_inference = output_dir_for_inference
+        if self.inference:
+            assert self.output_dir_for_inference is not None, "If inference is True, output_dir_for_inference must be " \
+                                                              "specified. Got None."
+            assert isdir(self.output_dir_for_inference), "output_dir_for_inference must be a directory. Got %s" % \
+                                                            self.output_dir_for_inference
 
     @staticmethod
     def modify_instance_seg_fn(instance_seg: np.ndarray) -> np.ndarray:
@@ -125,9 +137,9 @@ class InstanceSegProcessor(DefaultPreprocessor):
         #       '\ntarget shape', new_shape, 'target_spacing', target_spacing)
         old_shape = data.shape[1:]
         data = configuration_manager.resampling_fn_data(data, new_shape, original_spacing, target_spacing)
-        seg = configuration_manager.resampling_fn_seg(seg, new_shape, original_spacing, target_spacing)
+        seg = configuration_manager.resampling_fn_seg(seg, new_shape, original_spacing, target_spacing) if has_seg else None
         instance_seg = configuration_manager.resampling_fn_seg(instance_seg, new_shape, original_spacing,
-                                                               target_spacing)
+                                                               target_spacing) if has_seg else None
         if self.verbose:
             print(f'old shape: {old_shape}, new_shape: {new_shape}, old_spacing: {original_spacing}, '
                   f'new_spacing: {target_spacing}, fn_data: {configuration_manager.resampling_fn_data}')
@@ -153,14 +165,14 @@ class InstanceSegProcessor(DefaultPreprocessor):
             seg = self.modify_seg_fn(seg, plans_manager, dataset_json, configuration_manager)
             instance_seg = self.modify_instance_seg_fn(instance_seg)
 
-        if np.max(seg) > 127:
-            seg = seg.astype(np.int16)
-        else:
-            seg = seg.astype(np.int8)
-        if np.max(instance_seg) > 127:
-            instance_seg = instance_seg.astype(np.int16)
-        else:
-            instance_seg = instance_seg.astype(np.int8)
+            if np.max(seg) > 127:
+                seg = seg.astype(np.int16)
+            else:
+                seg = seg.astype(np.int8)
+            if np.max(instance_seg) > 127:
+                instance_seg = instance_seg.astype(np.int16)
+            else:
+                instance_seg = instance_seg.astype(np.int8)
 
         if self.add_center_heatmap_in_npz:
             # add center heatmaps
@@ -297,3 +309,93 @@ class InstanceSegProcessor(DefaultPreprocessor):
                         pbar.update()
                     remaining = [i for i in remaining if i not in done]
                     sleep(0.1)
+
+    def run_for_inference(self, dataset_name_or_id: Union[int, str], configuration_name: str, plans_identifier: str,
+                          num_processes: int, input_dir: str):
+        """
+        This is the same as run but for inference. The difference is that we do not need stuff needed for training,
+        and we do not need to save the gt segmentations. We also add an input_dir argument to specify where the
+        raw input data is located. Temporary preprocessed files will be stored in the output_dir.
+        """
+        dataset_name = maybe_convert_to_dataset_name(dataset_name_or_id)
+
+        assert isdir(join(nnUNet_raw, dataset_name)), "The requested dataset could not be found in nnUNet_raw"
+
+        plans_file = join(nnUNet_preprocessed, dataset_name, plans_identifier + '.json')
+        assert isfile(plans_file), "Expected plans file (%s) not found. Run corresponding nnUNet_plan_experiment " \
+                                   "first." % plans_file
+        plans = load_json(plans_file)
+        plans_manager = PlansManager(plans)
+        configuration_manager = plans_manager.get_configuration(configuration_name)
+
+        if self.verbose:
+            print(f'Preprocessing the following configuration: {configuration_name}')
+        if self.verbose:
+            print(configuration_manager)
+
+        dataset_json_file = join(nnUNet_preprocessed, dataset_name, 'dataset.json')
+        dataset_json = load_json(dataset_json_file)
+
+        output_directory = join(self.output_dir_for_inference, "preprocessed")
+        maybe_mkdir_p(output_directory)
+
+        if isdir(output_directory):
+            shutil.rmtree(output_directory)
+
+        maybe_mkdir_p(output_directory)
+
+        dataset = get_filenames_of_test_images(input_dir, dataset_json)
+        # identifiers = [os.path.basename(i[:-len(dataset_json['file_ending'])]) for i in seg_fnames]
+        # output_filenames_truncated = [join(output_directory, i) for i in identifiers]
+
+        # multiprocessing magic.
+        r = []
+        with multiprocessing.get_context("spawn").Pool(num_processes) as p:
+            remaining = list(range(len(dataset)))
+            # p is pretty nifti. If we kill workers they just respawn but don't do any work.
+            # So we need to store the original pool of workers.
+            workers = [j for j in p._pool]
+
+            for k in dataset.keys():
+                r.append(p.starmap_async(self.run_case_save,
+                                         ((join(output_directory, k), dataset[k]['images'], None,
+                                           plans_manager, configuration_manager,
+                                           dataset_json),)))
+
+            with tqdm(desc=None, total=len(dataset), disable=self.verbose) as pbar:
+                while len(remaining) > 0:
+                    all_alive = all([j.is_alive() for j in workers])
+                    if not all_alive:
+                        raise RuntimeError('Some background worker is 6 feet under. Yuck. \n'
+                                           'OK jokes aside.\n'
+                                           'One of your background processes is missing. This could be because of '
+                                           'an error (look for an error message) or because it was killed '
+                                           'by your OS due to running out of RAM. If you don\'t see '
+                                           'an error message, out of RAM is likely the problem. In that case '
+                                           'reducing the number of workers might help')
+                    done = [i for i in remaining if r[i].ready()]
+                    # get done so that errors can be raised
+                    _ = [r[i].get() for i in done]
+                    for _ in done:
+                        r[_].get()  # allows triggering errors
+                        pbar.update()
+                    remaining = [i for i in remaining if i not in done]
+                    sleep(0.1)
+
+
+def get_filenames_of_test_images(input_dir: str, dataset_json: dict):
+    if dataset_json is None:
+        raise ValueError("dataset_json must be provided")
+
+    if 'dataset' in dataset_json.keys():
+        dataset = dataset_json['dataset']
+        for k in dataset.keys():
+            dataset[k]['images'] = [os.path.abspath(join(input_dir, i)) if not os.path.isabs(i) else i for
+                                    i in dataset[k]['images']]
+    else:
+        identifiers = get_identifiers_from_splitted_dataset_folder(input_dir,
+                                                                   dataset_json['file_ending'])
+        images = create_lists_from_splitted_dataset_folder(input_dir,
+                                                           dataset_json['file_ending'], identifiers)
+        dataset = {i: {'images': im} for i, im in zip(identifiers, images)}
+    return dataset
