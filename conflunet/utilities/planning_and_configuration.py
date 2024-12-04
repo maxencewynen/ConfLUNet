@@ -3,7 +3,7 @@ from functools import lru_cache
 
 from nnunetv2.utilities.plans_handling.plans_handler import PlansManager, ConfigurationManager
 from nnunetv2.paths import nnUNet_preprocessed, nnUNet_results
-from nnunetv2.utilities.dataset_name_id_conversion import convert_id_to_dataset_name
+from nnunetv2.utilities.dataset_name_id_conversion import convert_id_to_dataset_name, convert_dataset_name_to_id
 
 from conflunet.preprocessing.preprocessors import InstanceSegProcessor
 
@@ -20,6 +20,10 @@ class PlansManagerInstanceSeg(PlansManager):
     @property
     def n_channels(self):
         return len(self.foreground_intensity_properties_per_channel)
+
+    @property
+    def dataset_id(self):
+        return convert_dataset_name_to_id(self.dataset_name)
 
 
 class ConfigurationManagerInstanceSeg(ConfigurationManager):

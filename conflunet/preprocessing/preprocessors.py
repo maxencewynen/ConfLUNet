@@ -336,7 +336,7 @@ class InstanceSegProcessor(DefaultPreprocessor):
         dataset_json_file = join(nnUNet_preprocessed, dataset_name, 'dataset.json')
         dataset_json = load_json(dataset_json_file)
 
-        output_directory = join(self.output_dir_for_inference, "preprocessed")
+        output_directory = self.output_dir_for_inference
         maybe_mkdir_p(output_directory)
 
         if isdir(output_directory):

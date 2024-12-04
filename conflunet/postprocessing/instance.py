@@ -175,23 +175,38 @@ class ConfLUNetPostprocessor(Postprocessor):
 
         # Compute the distances in batches to avoid memory issues
         total_elements = ctr_loc.shape[1]
-        batch_size = 1e6
-        num_batches = (total_elements + batch_size - 1) // batch_size
+        batch_size = 1e7
+        batches_were_processed = False
+        error = None
+        while not batches_were_processed and batch_size > 10:
+            try:
+                num_batches = (total_elements + batch_size - 1) // batch_size
 
-        # Initialize a list to store the results for each batch
-        instance_id_batches = []
+                # Initialize a list to store the results for each batch
+                instance_id_batches = []
 
-        for batch_idx in range(int(num_batches)):
-            start_idx = int(batch_idx * batch_size)
-            end_idx = int(min((batch_idx + 1) * batch_size, total_elements))
+                for batch_idx in range(int(num_batches)):
+                    start_idx = int(batch_idx * batch_size)
+                    end_idx = int(min((batch_idx + 1) * batch_size, total_elements))
 
-            # Process a batch of elements
-            ctr_loc_batch = ctr_loc[:, start_idx:end_idx]  # Slice along dim=1
-            distance_batch = torch.norm(ctr - ctr_loc_batch, dim=-1)  # [K, batch_size]
+                    # Process a batch of elements
+                    ctr_loc_batch = ctr_loc[:, start_idx:end_idx]  # Slice along dim=1
+                    distance_batch = torch.norm(ctr - ctr_loc_batch, dim=-1)  # [K, batch_size]
 
-            # Find the center with the minimum distance at each voxel, offset by 1
-            instance_id_batch = torch.argmin(distance_batch, dim=0).short() + 1
-            instance_id_batches.append(instance_id_batch)
+                    # Find the center with the minimum distance at each voxel, offset by 1
+                    instance_id_batch = torch.argmin(distance_batch, dim=0).short() + 1
+                    instance_id_batches.append(instance_id_batch)
+
+                batches_were_processed = True
+
+            except torch.cuda.OutOfMemoryError as e:
+                self.vprint(f"[INFO] Out of memory error occurred while grouping pixels with batch size {batch_size}. ")
+                self.vprint(f"       Reducing batch_size to {batch_size // 10}. ")
+                batch_size = batch_size // 10
+                error = e
+
+        if not batches_were_processed:
+            raise error
 
         # Concatenate the results along the batch dimension
         instance_id = torch.cat(instance_id_batches, dim=0).view(1, depth, height, width)
@@ -221,7 +236,8 @@ class ConfLUNetPostprocessor(Postprocessor):
         output_dict['semantic_pred_binary'] = self._convert_as(binary_pred, semantic_pred_proba)
 
         output_dict = self.remove_small_instances(output_dict)
-        instance_centers = self._find_instance_center(output_dict['center_pred'])
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        instance_centers = self._find_instance_center(output_dict['center_pred'].to(device))
 
         centers_mx = np.zeros_like(binary_pred)
         ic = instance_centers.cpu().numpy()
@@ -230,7 +246,7 @@ class ConfLUNetPostprocessor(Postprocessor):
         if self.calibrate_offsets:
             output_dict['offsets_pred'] = self._calibrate_offsets(output_dict['offsets_pred'], centers_mx)
             
-        instance_ids = self._group_pixels(instance_centers, output_dict['offsets_pred'])
+        instance_ids = self._group_pixels(instance_centers, output_dict['offsets_pred'].to(device))
         if self.compute_voting:
             instance_ids, voting_image = instance_ids
             output_dict['voting_image'] = self._convert_as(voting_image, semantic_pred_proba)

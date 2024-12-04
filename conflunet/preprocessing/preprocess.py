@@ -31,7 +31,9 @@ def preprocess_dataset(dataset_id: int,
                        configurations: Union[Tuple[str], List[str]] = ('2d', '3d_fullres', '3d_lowres'),
                        num_processes: Union[int, Tuple[int, ...], List[int]] = (8, 4, 8),
                        inference: bool = False,
+                       plans_manager: Optional[PlansManagerInstanceSeg] = None,
                        output_dir_for_inference: str = None,
+                       input_dir: str = None,
                        verbose: bool = False) -> None:
     if not isinstance(num_processes, list):
         num_processes = list(num_processes)
@@ -46,8 +48,9 @@ def preprocess_dataset(dataset_id: int,
 
     dataset_name = convert_id_to_dataset_name(dataset_id)
     print(f'Preprocessing dataset {dataset_name}')
-    plans_file = join(nnUNet_preprocessed, dataset_name, plans_identifier + '.json')
-    plans_manager = PlansManagerInstanceSeg(plans_file)
+    if plans_manager is None:
+        plans_file = join(nnUNet_preprocessed, dataset_name, plans_identifier + '.json')
+        plans_manager = PlansManagerInstanceSeg(plans_file)
     for n, c in zip(num_processes, configurations):
         print(f'Configuration: {c}...')
         if c not in plans_manager.available_configurations:
@@ -62,8 +65,11 @@ def preprocess_dataset(dataset_id: int,
                                                                 add_small_object_classes_in_npz=True,
                                                                 add_confluent_instances_in_npz=True)
         if inference:
+            if input_dir is None:
+                print(f"No input_dir provided for inference. Defaulting input_dir to nnUNet_raw/{dataset_name}/imagesTs")
+                input_dir = join(nnUNet_raw, dataset_name, "imagesTs")
             preprocessor.run_for_inference(dataset_id, c, plans_identifier,
-                                           input_dir=join(nnUNet_raw, dataset_name, "imagesTs"), num_processes=n)
+                                           input_dir=input_dir, num_processes=n)
         else:
             preprocessor.run(dataset_id, c, plans_identifier, num_processes=n)
 

@@ -1,6 +1,6 @@
 import torch
 import time
-from typing import Optional, Dict
+from typing import Optional, Dict, Union
 
 from monai.inferers import sliding_window_inference
 from monai.config.type_definitions import NdarrayOrTensor
@@ -27,6 +27,7 @@ class SemanticPredictor(Predictor):
         super(SemanticPredictor, self).__init__(
             plans_manager=plans_manager,
             model=model,
+            semantic=True,
             postprocessor=postprocessor,
             output_dir=output_dir,
             preprocessed_files_dir=preprocessed_files_dir,
@@ -36,13 +37,15 @@ class SemanticPredictor(Predictor):
             verbose=verbose
         )
 
-    def predict_batch(self, batch: dict, model: torch.nn.Module = None) -> Dict[str, NdarrayOrTensor]:
+    def predict_batch(self, batch: dict, model: Union[Dict[int, torch.nn.Module], torch.nn.Module] = None,
+                      model_index: int = None) -> Dict[str, NdarrayOrTensor]:
         if model is not None:
-            self.model = model
-        assert self.model is not None, "Model must be provided"
+            self.model[model_index] = model
+        assert self.model[model_index] is not None, "Model must be provided"
         device = self.device
 
-        self.model.to(device)
+        self.model[model_index].to(device)
+        self.model[model_index].eval()
 
         img = batch["img"].to(device)
         assert img.shape[0] == 1, "Batch size for original batch must be 1"
@@ -54,7 +57,8 @@ class SemanticPredictor(Predictor):
         patch_size = self.patch_size
         start = time.time()
         with torch.no_grad():
-            outputs = sliding_window_inference(img, patch_size, self.batch_size, self.model, mode='gaussian', overlap=0.5)
+            outputs = sliding_window_inference(img, patch_size, self.batch_size, self.model[model_index],
+                                               mode='gaussian', overlap=0.5)
         self.vprint(f"[INFO] Sliding window inference took {time.time() - start:.2f} seconds")
 
         if isinstance(outputs, tuple):
@@ -82,29 +86,34 @@ if __name__ == '__main__':
     # model = ConfLUNet(1,2, scale_offsets=20)
     # path_to_model = "/home/mwynen/Downloads/best_DSC_SO_A_L1_e-5_h1200o0.3_S20_seed1.pth"
     # model.load_state_dict(torch.load(path_to_model))
-    model = UNet3D(1,2)
-    path_to_model = "/home/mwynen/Downloads/best_DSC_SS_lre-5_seed1.pth"
-    model.load_state_dict(torch.load(path_to_model))
+    # model = UNet3D(1,2)
+    # path_to_model = "/home/mwynen/Downloads/best_DSC_SS_lre-5_seed1.pth"
+    # model.load_state_dict(torch.load(path_to_model))
     # model = DummySemanticProbabilityModel()
-    model.eval()
+    # model.eval()
+    models = [f"/home/mwynen/Dataset321_WMLIS/SEMANTIC_lr1e-2_e2500_checkpoints/fold_{f}/checkpoint_best_Dice_Score_CC.pth"
+              for f in range(5)]
+
 
     p = SemanticPredictor(
         plans_manager=plans_manager,
-        model=model,
+        model=models,
         postprocessor=ACLSPostprocessor(
             minimum_instance_size=3,
             semantic_threshold=0.5,
         ),
-        output_dir='/home/mwynen/data/nnUNet/tmp/output_dir_test',
-        preprocessed_files_dir='/home/mwynen/data/nnUNet/tmp/preprocessed_dir',
-        num_workers=0,
+        output_dir='/home/mwynen/data/nnUNet/tmp/output_dir_test_semantic',
+        # preprocessed_files_dir='/home/mwynen/data/nnUNet/tmp/preprocessed_dir',
+        num_workers=1,
         save_only_instance_segmentation=False
     )
+    p.predict_from_raw_input_dir(input_dir='/home/mwynen/data/nnUNet/nnUNet_raw/Dataset321_WMLIS/imagesTs')
+
     # p.predict_from_preprocessed_dir()
 
-    dataloader = p.get_dataloader()
-    predictions_loader = p.get_predictions_loader(dataloader, p.model)
-
-    for data_batch, predicted_batch in zip(dataloader, predictions_loader):
-        break
+    # dataloader = p.get_dataloader()
+    # predictions_loader = p.get_predictions_loader(dataloader, p.model)
+    #
+    # for data_batch, predicted_batch in zip(dataloader, predictions_loader):
+    #     break
 

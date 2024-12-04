@@ -1,5 +1,4 @@
 import os
-import json
 import numpy as np
 from torch import nn
 from os.path import join as pjoin
