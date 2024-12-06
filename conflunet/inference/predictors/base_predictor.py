@@ -166,7 +166,7 @@ class Predictor:
                 # Here we undo the preprocessing done by nnUNet (cf. conflunet/preprocessing/preprocessors.py)
                 # As the preprocessing went transpose -> crop -> resample, we need to revert this process by doing
                 # resample -> crop -> transpose
-                this_output = value
+                this_output = value.to('cpu') if isinstance(value, torch.Tensor) else value
                 # First make sure that the output is in the correct shape for the nnUNet resampling function
                 should_i_squeeze = False
                 should_i_unsqueeze = False
@@ -221,6 +221,7 @@ class Predictor:
                 # This is a special case because the offsets values actually correspond to different axes.
                 value = torch.squeeze(value, 0)
                 slicer = bounding_box_to_slice(properties['bbox_used_for_cropping'])
+                value = value.to('cpu') if isinstance(value, torch.Tensor) else value
 
                 converted_output = []
                 # We need to individually undo the preprocessing for each axis of the offsets (x, y, z), and stack
