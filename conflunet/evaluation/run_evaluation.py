@@ -1,124 +1,113 @@
 import os
-import nibabel as nib
+import argparse
+import warnings
 import numpy as np
+import nibabel as nib
+from pprint import pprint
+from os.path import join as pjoin
 
-from nnunetv2.paths import nnUNet_preprocessed
-
+from conflunet.evaluation.metrics import compute_metrics
+from conflunet.evaluation.utils import save_metrics
 from conflunet.postprocessing.small_instances_removal import remove_small_lesions_from_instance_segmentation
-from conflunet.utilities.planning_and_configuration import load_dataset_and_configuration
-from conflunet.evaluation.metrics import *
-from conflunet.evaluation.utils import *
 
 
-def compute_metrics_from_preprocessed_data_model_postprocessor_and_fold(
-        dataset_id: str,
-        output_dir: str,
-        model_name: str,
-        postprocessor_name: str,
-        fold: int,
-        verbose: bool = False
-) -> Dict[str, float]:
-    dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(dataset_id)
+def evaluate_single_prediction(pred_file, ref_file):
+    instance_seg_pred = nib.load(pred_file)
+    voxel_size_pred = instance_seg_pred.header["pixdim"][1:4]
+    instance_seg_pred = instance_seg_pred.get_fdata()
 
-    predictions_dir = pjoin(output_dir, dataset_name, model_name, f"fold_{fold}", postprocessor_name)
-    reference_dir = pjoin(nnUNet_preprocessed, dataset_name, configuration.data_identifier)
+    instance_seg_ref = nib.load(ref_file)
+    voxel_size_ref = instance_seg_ref.header["pixdim"][1:4]
+    instance_seg_ref = instance_seg_ref.get_fdata()
 
+    if not np.allclose(voxel_size_ref, voxel_size_pred):
+        warnings.warn(f"Reference annotation file {ref_file} and predicted annotation file {pred_file} "
+                      f"have different voxel sizes. This might be an issue worth investigating.")
+
+    instance_seg_ref = remove_small_lesions_from_instance_segmentation(instance_seg_ref, voxel_size=voxel_size_ref)
+
+    return compute_metrics(
+        instance_seg_pred,
+        instance_seg_ref,
+        voxel_size=voxel_size_ref,
+        verbose=args.verbose
+    )
+
+
+def find_matching_prediction_file(predictions_dir, ref_file):
+    # Expecting ref_file name to be {case_identifier}.nii.gz
+    if not ref_file.endswith(".nii.gz"):
+        extension = '.'.join(ref_file.split('.')[1:])
+        raise ValueError(f"extension not recognized. expected .nii.gz but got .{extension}")
+
+    case_identifier = os.path.basename(ref_file).replace('.nii.gz', '')
+    matching_pred_file = []
+    for filename in os.listdir(predictions_dir):
+        if case_identifier not in filename:
+            continue
+        matching_pred_file.append(filename)
+
+    if len(matching_pred_file) == 0:
+        raise FileNotFoundError(f"Cannot find matching prediction file for reference annotation {ref_file}")
+
+    if len(matching_pred_file) > 1:
+        raise ValueError(f"Found multiple matching prediction files for the same reference annotation {case_identifier}"
+                         f": ({matching_pred_file})")
+
+    return matching_pred_file[0]
+
+
+def main(args):
     all_metrics = {}
     all_pred_matches = {}
     all_ref_matches = {}
 
-    for filename in sorted(os.listdir(predictions_dir)):
-        print(filename)
-        if os.path.isdir(pjoin(predictions_dir, filename)) or not filename.endswith('.nii.gz'):
-            continue
-        if "instance_seg_pred" not in filename:
-            continue
-        case_identifier = filename.replace(f'_instance_seg_pred_{postprocessor_name}.nii.gz', '')
+    if os.path.isfile(args.pred):
+        if not os.path.isfile(args.ref):
+            raise ValueError(f"`pred` argument is a file while `ref` argument is a directory ({args.pred}, {args.ref})")
 
-        instance_seg_pred = nib.load(pjoin(predictions_dir, filename)).get_fdata()
-        ref_data = np.squeeze(np.load(pjoin(reference_dir, f'{case_identifier}.npz'))['instance_seg'])
-        instance_seg_ref = remove_small_lesions_from_instance_segmentation(ref_data, voxel_size=configuration.spacing)
-        metrics, pred_matches, ref_matches = compute_metrics(
-            instance_seg_pred,
-            instance_seg_ref,
-            voxel_size=configuration.spacing,
-            verbose=verbose
-        )
+        case_identifier = os.path.basename(args.ref).replace('.nii.gz', '')
+        metrics, pred_matches, ref_matches = evaluate_single_prediction(args.pred, args.ref)
+        save_dir = os.path.dirname(args.pred)
+
         all_metrics[case_identifier] = metrics
         all_pred_matches[case_identifier] = pred_matches
         all_ref_matches[case_identifier] = ref_matches
 
-    save_dir = pjoin(output_dir, dataset_name, model_name, f"fold_{fold}", postprocessor_name)
-    save_metrics(all_metrics, all_pred_matches, all_ref_matches, save_dir)
-
-
-def process_fold(fold, dataset_id, output_dir, model_name, postprocessor_name, verbose):
-    return compute_metrics_from_preprocessed_data_model_postprocessor_and_fold(
-        dataset_id,
-        output_dir,
-        model_name,
-        postprocessor_name,
-        fold,
-        verbose
-    )
-
-
-def compute_metrics_from_preprocessed_data_model_postprocessor_all_folds(
-        dataset_id: str,
-        output_dir: str,
-        model_name: str,
-        postprocessor_name: str,
-        verbose: bool = False
-):
-    import concurrent.futures
-
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        results = list(executor.map(
-            process_fold,
-            range(5),  # Folds 0 to 4
-            [dataset_id] * 5,
-            [output_dir] * 5,
-            [model_name] * 5,
-            [postprocessor_name] * 5,
-            [verbose] * 5
-        ))
-    dataset_name = load_dataset_and_configuration(dataset_id)[0]
-    summarize_metrics_from_model_and_postprocessor(dataset_name, model_name, postprocessor_name, output_dir)
-
-
-def compute_metrics_from_model_name(
-        dataset_id: str,
-        output_dir: str,
-        model_name: str,
-        postprocessor_name: str = None,
-        verbose: bool = False
-):
-    if postprocessor_name is not None:
-        compute_metrics_from_preprocessed_data_model_postprocessor_all_folds(dataset_id, output_dir,
-                                                                             model_name, postprocessor_name,
-                                                                             verbose)
     else:
-        postprocessor_names = ["ACLS", "CC"] if "SEMANTIC" in model_name else ["ConfLUNet"]
+        predictions_dir = args.pred
+        reference_dir = args.ref
+        if not os.path.isdir(args.ref):
+            raise ValueError(f"`pred` argument is a directory while `ref` argument is a file ({args.pred}, {args.ref})")
 
-        for pp_name in postprocessor_names:
-            compute_metrics_from_preprocessed_data_model_postprocessor_all_folds(dataset_id, output_dir, model_name, pp_name, verbose)
+        for ref_file in sorted(os.listdir(reference_dir)):
+            print(ref_file)
+            if os.path.isdir(pjoin(reference_dir, ref_file)) or not ref_file.endswith('.nii.gz'):
+                continue
+            pred_file = find_matching_prediction_file(predictions_dir, ref_file)
+            pred_file = pjoin(predictions_dir, pred_file)
+            ref_file = pjoin(reference_dir, ref_file)
+            case_identifier = os.path.basename(ref_file).replace('.nii.gz', '')
+
+            metrics, pred_matches, ref_matches = evaluate_single_prediction(pred_file, ref_file)
+
+            all_metrics[case_identifier] = metrics
+            all_pred_matches[case_identifier] = pred_matches
+            all_ref_matches[case_identifier] = ref_matches
+
+        save_dir = predictions_dir
+
+    pprint(all_metrics)
+    save_metrics(all_metrics, all_pred_matches, all_ref_matches, save_dir=save_dir)
+    print(f"Saved metrics files in {save_dir}")
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Run evaluation from model name and postprocessor name')
-    parser.add_argument('--dataset_id', type=int, help='Dataset ID')
-    parser.add_argument('--output_dir', type=str, help='Output directory')
-    parser.add_argument('--model_name', type=str, help='Model name')
-    parser.add_argument('--postprocessor_name', type=str, default=None, help='Postprocessor name')
-    parser.add_argument('--fold', type=int, default=None, help='Fold number')
+    parser = argparse.ArgumentParser(description='Compute metrics between reference instance annotation and predictions')
+    parser.add_argument('--ref', type=str, help='Reference instance annotations directory/file')
+    parser.add_argument('--pred', type=str, help='Predicted instance masks directory/file')
     parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
 
-    if args.fold is None and args.postprocessor_name is None:
-        compute_metrics_from_model_name(args.dataset_id, args.output_dir, args.model_name, None, args.verbose)
-    elif args.fold is None:
-        compute_metrics_from_preprocessed_data_model_postprocessor_all_folds(args.dataset_id, args.output_dir,
-                                                                             args.model_name, args.postprocessor_name,
-                                                                             args.verbose)
-    else:
-        raise NotImplementedError("Not implemented yet")
+    main(args)
+
