@@ -119,7 +119,7 @@ def compute_metrics(
     cl_ids_per_tier = {0: cl_ids_tier0, 1: cl_ids_tier1, 2: cl_ids_tier2}
 
     for tier in (0, 1, 2):
-        vprint(verbose, f"[INFO] Computing confluent lesion units (tier {tier} metrics...")
+        vprint(verbose, f"[INFO] Computing confluent lesion units (tier {tier} metrics...)")
         ### Confluent lesions Metrics ###
         confluents_instance_ref = np.copy(instance_ref)
         cl_ids = cl_ids_per_tier[tier]
