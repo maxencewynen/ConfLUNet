@@ -72,8 +72,8 @@ conflunet_train = "conflunet.training.run_training:run_training_entry"
 conflunet_predict = "conflunet.inference.predict_from_raw_input:predict_entry_point"
 conflunet_predict_folds = "conflunet.inference.predict_folds:predict_folds_entry_point"
 conflunet_evaluate = "conflunet.evaluation.run_evaluation:evaluate_entry_point"
-#nnUNetv2_export_model_to_zip = "nnunetv2.model_sharing.entry_points:export_pretrained_model_entry"
-#nnUNetv2_install_pretrained_model_from_zip = "nnunetv2.model_sharing.entry_points:install_from_zip_entry_point"
+conflunet_export_model_to_zip = "conflunet.model_sharing.export_model:export_pretrained_model_entry"
+conflunet_install_pretrained_model_from_zip = "conflunet.model_sharing.import_model:import_pretrained_model_entry"
 
 [build-system]
 requires = ["setuptools>=67.8.0"]

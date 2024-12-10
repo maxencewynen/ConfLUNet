@@ -6,9 +6,9 @@ ConfLUNet is a deep learning model that performs instance segmentation of multip
 
 ## How to get started?
 
-* [Installation instruction](docs/installation_instructions.md)
+* [Installation instruction](conflunet/docs/installation_instructions.md)
 * [Dataset format](https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/dataset_format.md) (following nnUNet)  
-* [Usage instructions](docs/how_to_use_conflunet.md) 
+* [Usage instructions](conflunet/docs/how_to_use_conflunet.md) 
 
 
 
