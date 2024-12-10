@@ -62,7 +62,11 @@ This will perform several steps:
 4. Save the results in `OUTPUT_DIR`
 
 ## How to run inference with pretrained models
-[Dedicated documentation]()
+[Dedicated documentation](run_inference_with_pretrained_models.md)
 
 ## How to Deploy and Run Inference with YOUR Pretrained Models
-TODO !
+Use the `conflunet_export_model_to_zip` command:
+```commandline
+conflunet_export_model_to_zip --dataset_id DATASET_ID --model_name MODEL_NAME --output_dir PATH/TO/OUTPUT/DIR
+```
+This will create a .zip file you can share with your best friends.
