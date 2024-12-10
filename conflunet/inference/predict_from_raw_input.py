@@ -116,7 +116,7 @@ def main(args):
     )
 
 
-if __name__ == '__main__':
+def predict_entry_point():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_id", type=int, required=True)
     parser.add_argument("--input_dir", type=str, required=True)
@@ -136,5 +136,5 @@ if __name__ == '__main__':
     main(args)
 
 
-
-
+if __name__ == '__main__':
+    predict_entry_point()

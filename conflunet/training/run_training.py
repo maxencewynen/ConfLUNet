@@ -5,7 +5,8 @@ from conflunet.training.semantic_trainer import SemanticTrainer
 from conflunet.training.conflunet_trainer import ConfLUNetTrainer
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
 
-if __name__ == '__main__':
+
+def run_training_entry():
 
     parser = argparse.ArgumentParser(description='Get all command line arguments.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -48,3 +49,7 @@ if __name__ == '__main__':
         trainer = ConfLUNetTrainer(**vars(args))
 
     trainer.run_training()
+
+
+if __name__ == '__main__':
+    run_training_entry()

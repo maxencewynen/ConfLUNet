@@ -102,12 +102,17 @@ def main(args):
     print(f"Saved metrics files in {save_dir}")
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Compute metrics between reference instance annotation and predictions')
+def evaluate_entry_point():
+    parser = argparse.ArgumentParser(
+        description='Compute metrics between reference instance annotation and predictions')
     parser.add_argument('--ref', type=str, help='Reference instance annotations directory/file')
     parser.add_argument('--pred', type=str, help='Predicted instance masks directory/file')
     parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
 
     main(args)
+
+
+if __name__ == '__main__':
+    evaluate_entry_point()
 

@@ -237,8 +237,7 @@ def predict_all_folds(
             summarize_metrics_from_model_and_postprocessor(dataset_name, model_name, pp_name, save_dir)
 
 
-
-if __name__=="__main__":
+def predict_folds_entry_point():
     import argparse
     parser = argparse.ArgumentParser(description="Predict and evaluate folds.")
     parser.add_argument("--dataset_id", required=True, type=int, help="Dataset ID.")
@@ -276,4 +275,7 @@ if __name__=="__main__":
             do_i_compute_metrics=not args.do_not_compute_metrics,
             verbose=args.verbose
         )
-    pass
+
+
+if __name__ == "__main__":
+    predict_folds_entry_point()
