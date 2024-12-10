@@ -22,6 +22,6 @@ Feel free to open an issue or pull request if you have any suggestions, question
 This project is licensed under the MIT LICENSE - see the LICENSE file for details.
 
 ## Acknowledgements
-<img src="documentation/assets/uclouvain_logo.png" height="100px" />
-<img src="documentation/assets/logo_UNIL.png" height="100px" />
-<img src="documentation/assets/trail-logo.jpg" height="100px" />
+<img src="conflunet/docs/assets/uclouvain_logo.png" height="100px" />
+<img src="conflunet/docs/assets/logo_UNIL.png" height="100px" />
+<img src="conflunet/docs/assets/trail-logo.jpg" height="100px" />
