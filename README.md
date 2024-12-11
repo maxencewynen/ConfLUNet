@@ -2,7 +2,7 @@
 
 ## What is ConfLUNet?
 
-ConfLUNet is a deep learning model that performs instance segmentation of multiple sclerosis lesions in FLAIR MRI images. The model is based on the the [nnUNet](https://github.com/MIC-DKFZ/nnUNet/tree/master) framework. The model is trained on a proprietary dataset.
+ConfLUNet is a deep learning model that performs instance segmentation of multiple sclerosis lesions in FLAIR MRI images. The model is based on the [nnUNet](https://github.com/MIC-DKFZ/nnUNet/tree/master) framework. The model is trained on a proprietary dataset.
 
 ## How to get started?
 

@@ -4,11 +4,14 @@ ConfLUNet's chore is heavily based on [nnUNet](https://github.com/MIC-DKFZ/nnUNe
 
 As with nnUNet, given some dataset, ConfLUNet fully automatically configures an entire segmentation pipeline that matches its properties. ConfLUNet covers the entire pipeline, from preprocessing to model training, postprocessing all the way to ensembling. After running ConfLUNet, the trained model(s) can be applied to the test cases for inference.
 
+### Installation instructions
+Before continuing, please make sure you have completed all the installation instructions detailed [here](installation_instructions.md). 
+
 ### Dataset Format
 ConfLUNet expects the data to be structured the same way as for nnUNet. Please go and read [nnUNet's dedicated guide](https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/dataset_format.md) to how to structure and organize your dataset properly.
 
 ### Experiment planning and preprocessing
-ConfLUNet uses bricks of the nnUNet framework for this part. nnU-Net will extract a dataset fingerprint (a set of dataset-specific properties such as image sizes, voxel spacings, intensity information etc). Though this information is used to design three U-Net configurations, ConfLUNet only uses one configuration (`3d_fullres`). During pre-processing, ConfLUNet adds some specific information to the data (mostly information related to instances, small lesions and confluent lesions).
+ConfLUNet uses bricks of the nnUNet framework for this part. nnU-Net will extract a dataset fingerprint (a set of dataset-specific properties such as image sizes, voxel spacings, intensity information etc.). Though this information is used to design three U-Net configurations, ConfLUNet only uses one configuration (`3d_fullres`). During pre-processing, ConfLUNet adds some specific information to the data (mostly information related to instances, small lesions and confluent lesions).
 
 To run fingerprint extraction, experiment planning and preprocessing you will have to use:
 ```commandline
