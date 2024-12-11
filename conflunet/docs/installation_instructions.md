@@ -14,7 +14,7 @@ cd ConfLUNet
 ```
 As with nnUNet, we strongly recommend that you install ConfLUNet's requirements in a virtual environment! Pip or anaconda are both fine. If you choose to compile PyTorch from source (see below), you will need to use conda instead of pip.
 
-Use a recent version of Python! 3.10 or newer is guaranteed to work!
+Use a recent version of Python! 3.9 or newer is guaranteed to work!
 
 1. Install [PyTorch](https://pytorch.org/get-started/locally/) as described on their website (conda/pip). Please install the latest version with support for your hardware (cuda, mps, cpu). For maximum speed, consider [compiling pytorch yourself](https://github.com/pytorch/pytorch#from-source) (experienced users only!).
 2. Install the repo locally 
