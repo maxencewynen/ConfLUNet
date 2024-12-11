@@ -1,7 +1,7 @@
 [project]
 name = "conflunet"
 version = "0.2.0"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 description = "ConfLUNet is a code repo for instance segmentation of multiple sclerosis lesions on brain MRI scans."
 readme = "README.md"
 license = { file = "LICENSE" }
