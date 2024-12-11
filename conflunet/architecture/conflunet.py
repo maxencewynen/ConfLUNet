@@ -2,6 +2,8 @@ from torch import nn
 import torch
 from typing import Tuple
 
+TRS = True
+
 
 class Conv3DBlock(nn.Module):
     """
@@ -16,12 +18,13 @@ class Conv3DBlock(nn.Module):
         Tensor: Output tensor after convolution.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, bottleneck: bool = False) -> None:
+    def __init__(self, in_channels: int, out_channels: int, bottleneck: bool = False,
+            track_running_stats: bool = TRS) -> None:
         super(Conv3DBlock, self).__init__()
         self.conv1 = nn.Conv3d(in_channels=in_channels, out_channels=out_channels // 2, kernel_size=(3, 3, 3), padding=1)
-        self.bn1 = nn.BatchNorm3d(num_features=out_channels // 2)
+        self.bn1 = nn.BatchNorm3d(num_features=out_channels // 2, track_running_stats=track_running_stats)
         self.conv2 = nn.Conv3d(in_channels=out_channels // 2, out_channels=out_channels, kernel_size=(3, 3, 3), padding=1)
-        self.bn2 = nn.BatchNorm3d(num_features=out_channels)
+        self.bn2 = nn.BatchNorm3d(num_features=out_channels, track_running_stats=track_running_stats)
         self.relu = nn.ReLU()
         self.bottleneck = bottleneck
         if not bottleneck:
@@ -51,12 +54,13 @@ class UpConv3DBlock(nn.Module):
         torch.Tensor: Output Tensor.
     """
 
-    def __init__(self, in_channels: int, res_channels: int = 0, last_layer: bool = False, out_channels: int = None) -> None:
+    def __init__(self, in_channels: int, res_channels: int = 0, last_layer: bool = False, out_channels: int = None,
+            track_running_stats: bool = TRS) -> None:
         super(UpConv3DBlock, self).__init__()
         assert (not last_layer and out_channels is None) or (last_layer and out_channels is not None), 'Invalid arguments'
         self.upconv1 = nn.ConvTranspose3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(2, 2, 2), stride=2)
         self.relu = nn.ReLU()
-        self.bn = nn.BatchNorm3d(num_features=in_channels // 2)
+        self.bn = nn.BatchNorm3d(num_features=in_channels // 2, track_running_stats=track_running_stats)
         self.conv1 = nn.Conv3d(in_channels=in_channels + res_channels, out_channels=in_channels // 2, kernel_size=(3, 3, 3), padding=(1, 1, 1))
         self.conv2 = nn.Conv3d(in_channels=in_channels // 2, out_channels=in_channels // 2, kernel_size=(3, 3, 3), padding=(1, 1, 1))
         self.last_layer = last_layer
@@ -101,33 +105,38 @@ class ConfLUNet(nn.Module):
     """
 
     def __init__(self, in_channels: int, num_classes: int, level_channels: Tuple[int, int, int] = (64, 128, 256),
-                 bottleneck_channel: int = 512, separate_decoders: bool = False, scale_offsets: int = 1) -> None:
+                 bottleneck_channel: int = 512, separate_decoders: bool = False, scale_offsets: int = 1,
+                 track_running_stats: bool = TRS) -> None:
         super(ConfLUNet, self).__init__()
 
         self.scale_offsets = scale_offsets
 
         # Analysis Path
-        self.a_block1 = Conv3DBlock(in_channels=in_channels, out_channels=level_channels[0])
-        self.a_block2 = Conv3DBlock(in_channels=level_channels[0], out_channels=level_channels[1])
-        self.a_block3 = Conv3DBlock(in_channels=level_channels[1], out_channels=level_channels[2])
-        self.bottleNeck = Conv3DBlock(in_channels=level_channels[2], out_channels=bottleneck_channel, bottleneck=True)
+        self.a_block1 = Conv3DBlock(in_channels=in_channels, out_channels=level_channels[0],
+                track_running_stats=track_running_stats )
+        self.a_block2 = Conv3DBlock(in_channels=level_channels[0], out_channels=level_channels[1],
+                track_running_stats=track_running_stats)
+        self.a_block3 = Conv3DBlock(in_channels=level_channels[1], out_channels=level_channels[2],
+                track_running_stats=track_running_stats)
+        self.bottleNeck = Conv3DBlock(in_channels=level_channels[2], out_channels=bottleneck_channel, bottleneck=True,
+                track_running_stats=track_running_stats)
 
         # Semantic Decoding Path
-        self.s_block3 = UpConv3DBlock(in_channels=bottleneck_channel, res_channels=level_channels[2])
-        self.s_block2 = UpConv3DBlock(in_channels=level_channels[2], res_channels=level_channels[1])
+        self.s_block3 = UpConv3DBlock(in_channels=bottleneck_channel, res_channels=level_channels[2], track_running_stats=track_running_stats)
+        self.s_block2 = UpConv3DBlock(in_channels=level_channels[2], res_channels=level_channels[1], track_running_stats=track_running_stats)
 
         self.separate_decoders = separate_decoders
         if not self.separate_decoders:
             self.s_block1 = UpConv3DBlock(in_channels=level_channels[1], res_channels=level_channels[0],
-                                          out_channels=num_classes + 4, last_layer=True)
+                                          out_channels=num_classes + 4, last_layer=True, track_running_stats=track_running_stats)
         else:
             self.s_block1 = UpConv3DBlock(in_channels=level_channels[1], res_channels=level_channels[0],
-                                          out_channels=num_classes, last_layer=True)
+                                          out_channels=num_classes, last_layer=True, track_running_stats=track_running_stats)
 
-            self.oc_block3 = UpConv3DBlock(in_channels=bottleneck_channel, res_channels=level_channels[2])
-            self.oc_block2 = UpConv3DBlock(in_channels=level_channels[2], res_channels=level_channels[1])
+            self.oc_block3 = UpConv3DBlock(in_channels=bottleneck_channel, res_channels=level_channels[2], track_running_stats=track_running_stats)
+            self.oc_block2 = UpConv3DBlock(in_channels=level_channels[2], res_channels=level_channels[1], track_running_stats=track_running_stats)
             self.oc_block1 = UpConv3DBlock(in_channels=level_channels[1], res_channels=level_channels[0],
-                                           out_channels=4, last_layer=True)
+                                           out_channels=4, last_layer=True, track_running_stats=track_running_stats)
 
         self._init_parameters()
 
@@ -175,7 +184,8 @@ class ConfLUNet(nn.Module):
         """
         for m in self.modules():
             if isinstance(m, torch.nn.Conv3d):
-                torch.nn.init.normal_(m.weight, std=0.001)
+                # torch.nn.init.normal_(m.weight, std=0.001)
+                torch.nn.init.kaiming_normal_(m.weight)
             elif isinstance(m, torch.nn.BatchNorm3d):
                 torch.nn.init.constant_(m.weight, 1)
                 torch.nn.init.constant_(m.bias, 0)
@@ -235,7 +245,8 @@ class UNet3D(nn.Module):
     def _init_parameters(self):
         for m in self.modules():
             if isinstance(m, torch.nn.Conv3d):
-                torch.nn.init.normal_(m.weight, std=0.001)
+                # torch.nn.init.normal_(m.weight, std=0.001)
+                torch.nn.init.kaiming_normal_(m.weight)
             elif isinstance(m, torch.nn.BatchNorm3d):
                 torch.nn.init.constant_(m.weight, 1)
                 torch.nn.init.constant_(m.bias, 0)

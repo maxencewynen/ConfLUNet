@@ -1,0 +1,83 @@
+[project]
+name = "conflunet"
+version = "0.2.0"
+requires-python = ">=3.10"
+description = "ConfLUNet is a code repo for instance segmentation of multiple sclerosis lesions on brain MRI scans."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Maxence Wynen", email = "maxence.wynen@uclouvain.be" },
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Healthcare Industry",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+keywords = [
+    'deep learning',
+    'image segmentation',
+    'instance segmentation',
+    'medical image analysis',
+    'medical image segmentation',
+    'ConfLUNet',
+    'conflunet',
+    'multiple sclerosis',
+    'mri'
+]
+dependencies = [
+    "torch>=2.1.2",
+    "acvl-utils>=0.2,<0.3",  # 0.3 may bring breaking changes. Careful!
+    "dynamic-network-architectures>=0.3.1,<0.4",  # 0.3.1 and lower are supported, 0.4 may have breaking changes. Let's be careful here
+    "tqdm>=4.64.0",
+    "dicom2nifti",
+    "scipy>=1.10.1",
+    "batchgenerators>=0.25",
+    "numpy>=1.24",
+    "scikit-learn>=1.3.0",
+    "scikit-image>=0.22.0",
+    "SimpleITK>=2.2.1",
+    "pandas>=1.5.3",
+    "graphviz",
+    'tifffile',
+    'requests',
+    "nibabel>=4.0.1",
+    "matplotlib",
+    "seaborn",
+    "imagecodecs",
+    "yacs",
+    "batchgeneratorsv2>=0.2",
+    "einops",
+    "joblib==1.3.1",
+    "monai==0.9.1",
+    "nnunetv2>=2.5.1",
+    "wandb>=0.15.5",
+    "seaborn"
+]
+
+[project.urls]
+homepage = "https://github.com/maxencewynen/ConfLUNet"
+repository = "https://github.com/maxencewynen/ConfLUNet"
+
+[project.scripts]
+conflunet_plan_and_preprocess = "conflunet.preprocessing.plan_and_preeprocess_entrypoints:plan_and_preprocess_entry"
+conflunet_extract_fingerprint = "conflunet.preprocessing.plan_and_preprocess_entrypoints:extract_fingerprint_entry"
+conflunet_plan_experiment = "conflunet.preprocessing.plan_and_preprocess_entrypoints:plan_experiment_entry"
+conflunet_preprocess = "conflunet.preprocessing.plan_and_preprocess_entrypoints:preprocess_entry"
+conflunet_train = "conflunet.training.run_training:run_training_entry"
+conflunet_predict = "conflunet.inference.predict_from_raw_input:predict_entry_point"
+conflunet_predict_folds = "conflunet.inference.predict_folds:predict_folds_entry_point"
+conflunet_evaluate = "conflunet.evaluation.run_evaluation:evaluate_entry_point"
+conflunet_export_model_to_zip = "conflunet.model_sharing.export_model:export_pretrained_model_entry"
+conflunet_install_pretrained_model_from_zip = "conflunet.model_sharing.import_model:import_pretrained_model_entry"
+
+[build-system]
+requires = ["setuptools>=67.8.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.codespell]
+skip = '.git,*.pdf,*.svg'

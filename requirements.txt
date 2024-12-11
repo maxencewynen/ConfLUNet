@@ -1,4 +1,5 @@
 numpy
+nnunetv2==2.5.1
 monai==0.9.1
 nibabel==4.0.1
 tqdm==4.64.0

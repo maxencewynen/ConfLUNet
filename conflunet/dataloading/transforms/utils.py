@@ -8,8 +8,22 @@ import os
 import nibabel as nib
 from monai.transforms import MapTransform
 from monai.config import KeysCollection
-from postprocess import remove_small_lesions_from_instance_segmentation
-from scipy.ndimage import center_of_mass
+from copy import copy
+
+
+class DeleteKeysd(MapTransform):
+    def __init__(self, keys: KeysCollection, allow_missing_keys=True):
+        super().__init__(keys)
+        self.keys = keys
+        self.allow_missing_keys = allow_missing_keys
+
+    def __call__(self, data):
+        d = dict(data)
+        d1 = copy(d)
+        for key in self.key_iterator(d):
+            if key in self.keys:
+                del d1[key]
+        return d1
 
 
 class Printer(Callable):
@@ -169,130 +183,3 @@ class Printerd:
             image = data[key]
             print(self.message, key, image.dtype)
         return data
-
-
-class BinarizeInstancesd(MapTransform):
-    """
-    Binarize the values of specified keys in the input dictionary.
-    Args:
-        keys (list): List of keys corresponding to the data to be binarized.
-        out_key (str, optional): Output key for the binarized data. Defaults to "label".
-    Returns:
-        dict: The input data dictionary with binarized values.
-
-    Example:
-        >>> binarizer = BinarizeInstancesd(keys=["image", "mask"], out_key="binarized")
-        >>> data = {"image": np.random.rand(64, 64), "mask": np.random.rand(64, 64)}
-        >>> transformed_data = binarizer(data)
-    """
-
-    def __init__(self, keys: list, out_key: str = "label"):
-        """
-        Initializes the BinarizeInstancesd transform with the specified keys and output key.
-
-        Args:
-            keys (list): List of keys corresponding to the data to be binarized.
-            out_key (str, optional): Output key for the binarized data. Defaults to "label".
-        """
-        super().__init__(keys)
-        self.keys = keys
-        self.out_key = out_key
-
-    def __call__(self, data: dict) -> dict:
-        """
-        Binarizes the values of specified keys in the input dictionary.
-        Args:
-            data (dict): Input data dictionary containing the keys to be binarized.
-        Returns:
-            dict: The input data dictionary with binarized values.
-        """
-        d = dict(data)
-        for key in self.key_iterator(d):
-            out_key = self.out_key + "_" + key if len(self.keys) > 1 else self.out_key
-            assert np.all(np.unique(data[key]) >= 0), "The input data should be non-negative."
-            image = deepcopy(data[key])
-            image[image > 0] = 1
-            d[out_key] = image.astype(np.uint8)
-        return d
-
-
-def make_offset_matrices(data, sigma=2, voxel_size=(1, 1, 1), remove_small_lesions=False, l_min=14):
-    # Define 3D Gaussian function
-    def gaussian_3d(x, y, z, cx, cy, cz, sigma):
-        return np.exp(-((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) / (2 * sigma ** 2))
-
-    data = np.squeeze(data)
-    if remove_small_lesions:
-        data = remove_small_lesions_from_instance_segmentation(data, voxel_size=voxel_size, l_min=l_min)
-
-    heatmap = np.zeros_like(data, dtype=np.float32)
-    offset_x = np.zeros_like(data, dtype=np.float32)
-    offset_y = np.zeros_like(data, dtype=np.float32)
-    offset_z = np.zeros_like(data, dtype=np.float32)
-
-    # Create coordinate grids
-    x_grid, y_grid, z_grid = np.meshgrid(np.arange(data.shape[0]),
-                                         np.arange(data.shape[1]),
-                                         np.arange(data.shape[2]),
-                                         indexing='ij')
-
-    # Get all unique lesion IDs (excluding zero which is typically background)
-    lesion_ids = np.unique(data)[1:]
-
-    # For each lesion id
-    for lesion_id in lesion_ids:
-        # Get binary mask for the current lesion
-        mask = (data == lesion_id)
-
-        # Compute the center of mass of the lesion
-        cx, cy, cz = center_of_mass(mask)
-
-        # Compute heatmap values using broadcasting
-        current_gaussian = gaussian_3d(x_grid, y_grid, z_grid, cx, cy, cz, sigma)
-
-        # Update heatmap with the maximum value encountered so far at each voxel
-        heatmap = np.maximum(heatmap, current_gaussian)
-
-        # Update offset matrices
-        offset_x[mask] = cx - x_grid[mask]
-        offset_y[mask] = cy - y_grid[mask]
-        offset_z[mask] = cz - z_grid[mask]
-
-    return np.expand_dims(heatmap, axis=0).astype(np.float32), \
-        np.stack([offset_x, offset_y, offset_z], axis=0).astype(np.float32)
-
-
-class LesionOffsetTransformd(MapTransform):
-    """
-    A MONAI transform to compute the offsets for each voxel from the center of mass of its lesion.
-    """
-
-    def __init__(self, keys: KeysCollection, allow_missing_keys=False, remove_small_lesions=False, l_min=14, sigma=2):
-        """
-        Args:
-            key (str): the key corresponding to the desired data in the dictionary to apply the transformation.
-        """
-        super().__init__(keys, allow_missing_keys=allow_missing_keys)
-        if type(keys) == list and len(keys) > 1:
-            raise Exception("This transform should only be used with 1 key.")
-        self.remove_small_lesions = remove_small_lesions
-        self.l_min = l_min
-        self.sigma = sigma
-
-    def __call__(self, data):
-        d = dict(data)
-        voxel_size = tuple(data[[k for k in list(data.keys()) if "_meta_dict" in k][0]]['pixdim'][1:4])
-        for key in self.key_iterator(d):
-            com_gt, com_reg = self.make_offset_matrices(d[key], voxel_size=voxel_size, sigma=self.sigma)
-            d["center_heatmap"] = com_gt
-            d["offsets"] = com_reg
-            d["label"] = (d[key] > 0).astype(np.uint8)
-        return d
-
-    def make_offset_matrices(self, data, sigma=2, voxel_size=(1, 1, 1)):
-        return make_offset_matrices(data,
-                                    sigma=sigma,
-                                    voxel_size=voxel_size,
-                                    remove_small_lesions=self.remove_small_lesions,
-                                    l_min=self.l_min)
-
