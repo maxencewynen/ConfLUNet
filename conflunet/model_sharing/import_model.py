@@ -12,19 +12,34 @@ def import_model(compressed_file):
     dirname = os.path.dirname(compressed_file)
     shutil.unpack_archive(compressed_file, dirname, 'zip')
 
+    cpf = compressed_file.replace('.zip', '')
     dataset_name = None
-    for i, dataset_name in enumerate(os.listdir(pjoin(dirname, 'nnUNet_results'))):
+    for i, dataset_name in enumerate(os.listdir(pjoin(dirname, cpf, 'nnUNet_results'))):
         if i > 0:
             raise Exception
 
-    model_name = os.listdir(pjoin(dirname, 'nnUNet_results', dataset_name))[0]
+    model_name = os.listdir(pjoin(dirname, cpf, 'nnUNet_results', dataset_name))[0]
     if pexists(pjoin(nnUNet_results, dataset_name, model_name)):
         raise FileExistsError(f"Model {model_name} for dataset {dataset_name} already exists "
                               f"({pjoin(nnUNet_results, dataset_name, model_name)})")
 
-    shutil.move(pjoin(dirname, 'nnUNet_results', dataset_name), nnUNet_results)
-    shutil.move(pjoin(dirname, 'nnUNet_preprocessed', dataset_name), nnUNet_preprocessed)
-    shutil.move(pjoin(dirname, 'nnUNet_raw', dataset_name), nnUNet_raw)
+    shutil.move(pjoin(dirname, cpf, 'nnUNet_results', dataset_name, model_name),
+                pjoin(nnUNet_results, dataset_name))
+    if pexists(pjoin(nnUNet_preprocessed, dataset_name, 'dataset.json')):
+        r = input(f"Path '{pjoin(nnUNet_preprocessed, dataset_name, 'dataset.json')}' already exists. Replace (y/n)?")
+        if r.lower() not in ('n', 'no'):
+            shutil.move(pjoin(dirname, cpf, 'nnUNet_preprocessed', dataset_name, 'dataset.json'),
+                        nnUNet_preprocessed, dataset_name)
+    if pexists(pjoin(nnUNet_preprocessed, dataset_name, 'nnUNetPlans.json')):
+        r = input(f"Path '{pjoin(nnUNet_preprocessed, dataset_name, 'nnUNetPlans.json')}' already exists. Replace (y/n)?")
+        if r.lower() not in ('n', 'no'):
+            shutil.move(pjoin(dirname, cpf, 'nnUNet_preprocessed', dataset_name, 'dataset.json'),
+                        nnUNet_preprocessed, dataset_name)
+
+    if not pexists(pjoin(nnUNet_raw, dataset_name)):
+        shutil.move(pjoin(dirname, cpf, 'nnUNet_raw', dataset_name), nnUNet_raw)
+
+    shutil.rmtree(pjoin(dirname, cpf))
 
     print(f"Succesful import of model {model_name} for dataset {dataset_name}.")
 
