@@ -93,6 +93,7 @@ class WeightedConfLUNetLoss(Callable):
             offsets_weights: torch.Tensor = None,
             centers_weights: torch.Tensor = None,
     ):
+        breakpoint()
         ### SEGMENTATION LOSS ###
         segmentation_loss, dice_loss, focal_loss = self.loss_function_segmentation(semantic_pred, semantic_ref, semantic_weights)
 
@@ -152,7 +153,6 @@ class ConfLUNetLoss(WeightedConfLUNetLoss):
             offsets_weights: torch.Tensor = None,
             centers_weights: torch.Tensor = None,
     ):
-        breakpoint()
         if semantic_weights is not None:
             warnings.warn("ConfLUNetLoss does not support semantic_weights. Ignoring them.")
         if offsets_weights is not None:
