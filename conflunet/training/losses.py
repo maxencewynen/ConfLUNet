@@ -165,6 +165,29 @@ class ConfLUNetLoss(WeightedConfLUNetLoss):
                                                    centers_weights=None)
 
 
+def get_spatial_embedding(offsets_pred: torch.Tensor):
+    """
+    Compute the spatial embedding from the offsets prediction (position matrix + offsets).
+    """
+    batch_size = offsets_pred.size(0)
+
+    # Compute spatial embedding
+    position_matrix = torch.meshgrid(
+        torch.arange(offsets_pred.size(2)),
+        torch.arange(offsets_pred.size(3)),
+        torch.arange(offsets_pred.size(4)),
+        indexing='ij'
+    )  # (batch_size, 3, H, W, D), each channel is a spatial coordinate
+
+    position_matrix = torch.stack(position_matrix, dim=0).float()  # (3, H, W, D)
+    position_matrix = torch.stack([position_matrix] * batch_size, dim=0)  # (batch_size, 3, H, W, D)
+    position_matrix = position_matrix.to(offsets_pred.device)  # (batch_size, 3, H, W, D)
+
+    spatial_embedding = position_matrix + offsets_pred  # (batch_size, 3, H, W, D)
+
+    return spatial_embedding
+
+
 class PullLoss(Callable):
     def __call__(
             self,
@@ -175,36 +198,42 @@ class PullLoss(Callable):
     ):
         ### BUILD 4D EMBEDDING ###
         # concatenate (position matrix + offsets) and associative pred
-        complete_embedding = ...  # (batch_size, 4, H, W, D)
-
-        # Useful for later: build a 4d instance reference mask where the ids are repeated along the associative
-        # dimension (3 spatial + 1 associative)
-        instance_seg_ref_plus_associative = ...
+        spatial_embedding = get_spatial_embedding(offsets_pred)  # (batch_size, 3, H, W, D)
+        complete_embedding = torch.cat([spatial_embedding, associative_pred], dim=1) # (batch_size, 4, H, W, D)
 
         total_pull_loss = 0
+        total_n_instances = 0
 
-        all_instances_id = torch.unique(instance_seg_ref)
-        all_instances_id = all_instances_id[all_instances_id != 0]
-        n_instances = len(all_instances_id)
+        for b in range(offsets_pred.size(0)):
 
-        # For each instance in the reference:
-        for instance_id in all_instances_id:
-            # Have a binary mask for this instance
-            this_instance_mask = instance_seg_ref_plus_associative == instance_id
+            all_instances_id = torch.unique(instance_seg_ref[b])
+            all_instances_id = all_instances_id[all_instances_id != 0]
+            n_instances = len(all_instances_id)
+            total_n_instances += n_instances
 
-            # Compute centroid coordinate (4d tensor), which corresponds to the average of all embedding coordinates
-            # of the instances voxels
-            this_instance_centroid_coordinate = ...
+            # For each instance in the reference:
+            for instance_id in all_instances_id:
+                # Have a binary mask for this instance
+                this_instance_coordinates = torch.where(instance_seg_ref[b, 0] == instance_id)  # tuple of 3 tensors shaped (n_voxels_in_this_instance,)
+                coords_x, coords_y, coords_z = this_instance_coordinates
 
-            # Get list of 4d embedding coordinates for this instance
-            this_instance_embeddings_coordinates = ...  # (n_voxels_in_this_instance, 4)
+                # Compute centroid coordinate (4d tensor), which corresponds to the average of all embedding coordinates
+                # of the instances voxels
+                # First get all 4d embedding coordinates for this instance
+                this_instance_emb_coordinates = complete_embedding[b, :, coords_x, coords_y, coords_z]  # (4, n_voxels_in_this_instance)
+                this_instance_emb_coordinates = this_instance_emb_coordinates.transpose(0, 1)  # (n_voxels_in_this_instance, 4)
 
-            # This step can be done in multiple chunks if GPU memory is needed!
-            # Average all squared L2 norm of (embedding coordinate - this instance centroid coordinate) for all voxels
-            this_instance_pull_loss = MSELoss()(this_instance_embeddings_coordinates,
-                                                this_instance_centroid_coordinate.expand_as(this_instance_embeddings_coordinates))
+                # Average all coordinates to obtain the centroid coordinate
+                this_instance_centroid_coordinate = this_instance_emb_coordinates.mean(dim=0)  # (4,)
 
-        total_pull_loss = total_pull_loss / n_instances if n_instances > 0 else torch.tensor(0).to(offsets_pred.device)
+                # Average all squared L2 norm of (embedding coordinate - this instance centroid coordinate) for all voxels
+                # This step can be done in multiple chunks if GPU memory is needed!
+                this_instance_pull_loss = MSELoss()(this_instance_emb_coordinates,
+                                                    this_instance_centroid_coordinate.unsqueeze(0).repeat(this_instance_emb_coordinates.size(0), 1))
+
+                total_pull_loss += this_instance_pull_loss
+
+        total_pull_loss = total_pull_loss / total_n_instances if total_n_instances > 0 else torch.tensor(0).to(offsets_pred.device)
 
         return total_pull_loss
 
@@ -216,53 +245,63 @@ class PushLoss(Callable):
 
     def __call__(
             self,
-            offsets_pred: torch.Tensor,
-            associative_pred: torch.Tensor,
-            semantic_ref: torch.Tensor,
-            instance_seg_ref: torch.Tensor,
+            offsets_pred: torch.Tensor,  # (batch_size, 3, H, W, D)
+            associative_pred: torch.Tensor,  # (batch_size, 1, H, W, D)
+            semantic_ref: torch.Tensor,  # (batch_size, 1, H, W, D)
+            instance_seg_ref: torch.Tensor,  # (batch_size, 1, H, W, D)
     ):
-        # Compute spatial embedding
-        spatial_embedding = ...  # position matrix + offsets pred
+        spatial_embedding = get_spatial_embedding(offsets_pred)  # (batch_size, 3, H, W, D)
 
         total_push_loss = 0
+        total_instances = 0
 
-        all_instances_id = torch.unique(instance_seg_ref)
-        all_instances_id = all_instances_id[all_instances_id != 0]
-        n_instances = len(all_instances_id)
+        for b in range(offsets_pred.size(0)):
+            all_instances_id = torch.unique(instance_seg_ref[b])  # (n_instances + 1,)
+            all_instances_id = all_instances_id[all_instances_id != 0]  # (n_instances,)
+            n_instances = len(all_instances_id)
+            total_instances += n_instances
 
-        spatial_centroids = {}
-        associative_centroids = {}
-        # compute the spatial and associative centroids of each instance
-        for instance_id in all_instances_id:
-            # Have a binary mask for this instance
-            this_instance_mask_spatial = instance_seg_ref == instance_id
+            spatial_centroids = {}
+            associative_centroids = {}
+            # compute the spatial and associative centroids of each instance
+            for instance_id in all_instances_id:
+                # Have a binary mask for this instance
+                this_instance_coordinates = torch.where(instance_seg_ref[b, 0] == instance_id)  # tuple of 3 tensors shaped (n_voxels_in_this_instance,)
+                coords_x, coords_y, coords_z = this_instance_coordinates
 
+                # Compute centroid coordinate (4d tensor), which corresponds to the average of all embedding coordinates
+                # of the instances voxels
+                # First get all 4d embedding coordinates for this instance
+                this_instance_spat_emb_coordinates = spatial_embedding[b, :, coords_x, coords_y, coords_z]  # (3, n_voxels_in_this_instance)
+                this_instance_spat_emb_coordinates = this_instance_spat_emb_coordinates.transpose(0, 1)  # (n_voxels_in_this_instance, 3)
 
-            spatial_centroids[instance_id] = ...
+                # Average all coordinates to obtain the centroid coordinate
+                this_instance_spatial_centroid_coordinate = this_instance_spat_emb_coordinates.mean(dim=0)  # (3,)
+                spatial_centroids[instance_id] = this_instance_spatial_centroid_coordinate
 
-            this_instance_mask_associative = instance_seg_ref == instance_id
-            associative_centroids[instance_id] = ...
+                this_instance_mask_associative = instance_seg_ref == instance_id
+                associative_centroids[instance_id] = ...
 
-        for instance_id_1 in all_instances_id:
-            spatial_centroid_1 = spatial_centroids[instance_id_1]
-            associative_centroid_1 = associative_centroids[instance_id_1]
+            for instance_id_1 in all_instances_id:
+                spatial_centroid_1 = spatial_centroids[instance_id_1]
+                associative_centroid_1 = associative_centroids[instance_id_1]
 
-            for instance_id_2 in all_instances_id[all_instances_id != instance_id_1]:
-                spatial_centroid_2 = spatial_centroids[instance_id_2]
-                associative_centroid_2 = associative_centroids[instance_id_2]
+                for instance_id_2 in all_instances_id[all_instances_id != instance_id_1]:
+                    spatial_centroid_2 = spatial_centroids[instance_id_2]
+                    associative_centroid_2 = associative_centroids[instance_id_2]
 
-                # L2 norm between spatial centroids
-                spatial_distance = torch.norm(spatial_centroid_1 - spatial_centroid_2)
+                    # L2 norm between spatial centroids
+                    spatial_distance = torch.norm(spatial_centroid_1 - spatial_centroid_2)
 
-                # compute the right margin for this pair of instances
-                associative_margin = torch.sqrt(self.margin ** 2 - spatial_distance ** 2)  # ?????
+                    # compute the right margin for this pair of instances
+                    associative_margin = torch.sqrt(self.margin ** 2 - spatial_distance ** 2)  # ?????
 
-                associative_distance = torch.norm(associative_centroid_1 - associative_centroid_2)
-                push_loss = torch.relu(torch.abs(associative_margin - associative_distance) ** 2)
+                    associative_distance = torch.norm(associative_centroid_1 - associative_centroid_2)
+                    push_loss = torch.relu(torch.abs(associative_margin - associative_distance) ** 2)
 
-                total_push_loss += push_loss
+                    total_push_loss += push_loss
 
-        total_push_loss = total_push_loss / (n_instances * (n_instances - 1)) if n_instances > 0 \
+        total_push_loss = total_push_loss / (total_instances * (total_instances - 1)) if total_instances > 0 \
             else torch.tensor(0).to(offsets_pred.device)
 
         return total_push_loss
