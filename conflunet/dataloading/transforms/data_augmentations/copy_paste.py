@@ -345,6 +345,11 @@ class RandCopyPasted(RandomizableTransform, MapTransform):
             return dict(data)
 
         instance_seg = data[self.instance_seg_key].squeeze()
+        n_objects = len(torch.unique(instance_seg)) - 1
+        n_objects_to_paste = int(self.n_objects_to_paste * n_objects)
+        if n_objects_to_paste < 1:
+            return dict(data)
+
         image = data[self.image_key]
         seg = data[self.seg_key].squeeze()
         paste_region_mask = np.array([1])
@@ -354,7 +359,6 @@ class RandCopyPasted(RandomizableTransform, MapTransform):
         paste_region_mask = paste_region_mask.squeeze()
 
         modified_instance_seg = instance_seg
-        n_objects = len(torch.unique(modified_instance_seg)) - 1
         modified_image = image
         orig_seg = modified_seg = seg
         lesion_intensity = modified_image[:, orig_seg.to(bool)]
@@ -367,7 +371,6 @@ class RandCopyPasted(RandomizableTransform, MapTransform):
             paste_region_mask = paste_region_mask.astype(bool)
 
         added_lesions = 0
-        n_objects_to_paste = int(self.n_objects_to_paste * n_objects)
 
         for i in range(n_objects_to_paste):
             mask_to_sample = (modified_seg >= 0) & (modified_instance_seg == 0) & paste_region_mask

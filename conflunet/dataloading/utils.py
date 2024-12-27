@@ -13,7 +13,6 @@ from monai.transforms import (
     RandAffined,
     RandSpatialCropd,
     RandCropByPosNegLabeld,
-    Identityd
 )
 
 from conflunet.dataloading.transforms.data_augmentations.copy_paste import RandCopyPasted
@@ -143,6 +142,8 @@ def get_train_transforms(seed: Union[int, None] = None,
         # RandSpatialCropd(keys=['img', 'seg', 'instance_seg', 'brainmask'],
         #                  roi_size=patch_size,
         #                  random_center=False, random_size=False),
+    ]
+    transform_list += [
         RandCopyPasted(
             keys=['img', 'seg', 'instance_seg'],
             image_key='img',
@@ -154,11 +155,13 @@ def get_train_transforms(seed: Union[int, None] = None,
             blend_mode='gaussian',
             confluence_proportion=.8,
             path_to_json=path_to_shapes_json
-        ) if path_to_shapes_json is not None else Identityd(keys=["img"]),
+        )] if path_to_shapes_json is not None else []
+
+    transform_list += [
         *get_nnunet_augmentations(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask'] + additional_keys),
         LesionOffsetTransformd(keys="instance_seg"),
         ToTensord(keys=['img', 'seg', 'offsets', 'center_heatmap', 'brainmask'] + additional_keys),
-        DeleteKeysd(keys=['properties']),
+        DeleteKeysd(keys=['properties'] if path_to_shapes_json is not None else ['properties', 'nawm']),
     ]
     if remove_small_instances:
         transform_list.insert(1, RemoveSmallInstancesTransform(
