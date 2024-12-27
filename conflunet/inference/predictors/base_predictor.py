@@ -297,6 +297,8 @@ class Predictor:
                               max_workers: int = 4) -> Generator[Dict, None, None]:
         if model is not None:
             self.model = model
+        if isinstance(self.model, torch.nn.Module):
+            self.model = {None: self.model}
 
         futures = []
         next_result_idx = 0  # Tracks the next result to yield in the correct order
