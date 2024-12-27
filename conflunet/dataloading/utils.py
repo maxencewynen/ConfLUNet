@@ -15,6 +15,7 @@ from monai.transforms import (
     RandCropByPosNegLabeld,
 )
 
+from conflunet.dataloading.transforms.data_augmentations.copy_paste import RandCopyPasted
 from conflunet.dataloading.transforms.data_augmentations.scaleintensityfixedmean import RandScaleIntensityFixedMeand
 from conflunet.dataloading.transforms.data_augmentations.adjustcontrast import RandAdjustContrastd
 from conflunet.dataloading.transforms.data_augmentations.simulatelowresolution import RandSimulateLowResolutiond
@@ -117,16 +118,19 @@ def get_train_transforms(seed: Union[int, None] = None,
                          minimum_size_along_axis: int = 3,
                          get_small_instances=False,
                          get_confluent_instances=False,
+                         path_to_shapes_json: str = None
                          ) -> Compose:
     additional_keys = []
     if get_small_instances or get_confluent_instances:
         additional_keys.append('weights')
+    if path_to_shapes_json is not None:
+        additional_keys.append('nawm')
 
     transform_list = [
         CustomLoadNPZInstanced(keys=['data'], get_small_instances=get_small_instances, get_confluent_instances=get_confluent_instances),
         FgBgToIndicesd(keys=['seg']),
-        # # Crop random fixed sized regions with the center being a foreground or background voxel
-        # # based on the Pos Neg Ratio.
+        # Crop random fixed sized regions with the center being a foreground or background voxel
+        # based on the Pos Neg Ratio.
         RandCropByPosNegLabeld(keys=['img', 'seg', 'instance_seg', 'brainmask'] + additional_keys,
                                label_key="seg",
                                fg_indices_key="seg_fg_indices",
@@ -138,6 +142,18 @@ def get_train_transforms(seed: Union[int, None] = None,
         # RandSpatialCropd(keys=['img', 'seg', 'instance_seg', 'brainmask'],
         #                  roi_size=patch_size,
         #                  random_center=False, random_size=False),
+        RandCopyPasted(
+            keys=['img', 'seg', 'instance_seg'],
+            image_key='img',
+            instance_seg_key='instance_seg',
+            seg_key='seg',
+            paste_region_mask_keys=('nawm', 'brainmask'),
+            prob=1.,
+            n_objects_to_paste_range=(1, 1),
+            blend_mode='gaussian',
+            confluence_proportion=.8,
+            path_to_json=path_to_shapes_json
+        ),
         *get_nnunet_augmentations(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask'] + additional_keys),
         LesionOffsetTransformd(keys="instance_seg"),
         ToTensord(keys=['img', 'seg', 'offsets', 'center_heatmap', 'brainmask'] + additional_keys),

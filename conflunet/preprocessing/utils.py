@@ -1,6 +1,11 @@
+import warnings
+from os.path import exists
+from typing import Dict
+
 import nibabel as nib
 import numpy as np
 
+from batchgenerators.utilities.file_and_folder_operations import *
 from acvl_utils.cropping_and_padding.bounding_boxes import get_bbox_from_mask, bounding_box_to_slice
 from nnunetv2.preprocessing.cropping.cropping import create_nonzero_mask
 from scipy.ndimage import center_of_mass
@@ -43,7 +48,7 @@ def save_npz_as_nii_files(path, affine=None):
             save_nii(path.replace('.npz', f'_{key}.nii.gz'), data[key], affine)
 
 
-def crop_to_nonzero(data, seg=None, instance_seg=None, nonzero_label=-1):
+def crop_to_nonzero(data, seg=None, nawm=None, instance_seg=None, nonzero_label=-1):
     """
     Adapted from nnunetv2.preprocessing.cropping.cropping to handle instance segmentation maps
     :param instance_seg:
@@ -64,12 +69,14 @@ def crop_to_nonzero(data, seg=None, instance_seg=None, nonzero_label=-1):
         seg[(seg == 0) & (~nonzero_mask)] = nonzero_label
     else:
         seg = np.where(nonzero_mask, np.int8(0), np.int8(nonzero_label))
+    if nawm is not None:
+        nawm = nawm[slicer]
     if instance_seg is not None:
         instance_seg = instance_seg[slicer]
     else:
         print('Instance segmentation map not provided. Returning None.')
         instance_seg = None
-    return data, seg, instance_seg, bbox
+    return data, seg, nawm, instance_seg, bbox
 
 
 def create_center_heatmap_from_instance_seg(instance_seg: np.array, sigma: int = 2):
@@ -175,6 +182,25 @@ def merge_maps(small_objects: np.array, confluent_instances: np.array):
     merged_map[(small_objects == 2) & (confluent_instances == 1)] = 3  # small, not confluent
     merged_map[(small_objects == 2) & (confluent_instances == 2)] = 4  # small, confluent
     return merged_map
+
+
+def update_dataset_with_train_nawm_masks(raw_dataset_folder: str, dataset: Dict[str, Dict[str, np.ndarray]]):
+    nawm_folder = join(raw_dataset_folder, 'nawmTr')
+    no_nawm_folder = False
+    if not exists(nawm_folder):
+        no_nawm_folder = True
+
+    for case_id in dataset.keys():
+        if no_nawm_folder:
+            dataset[case_id]['nawm'] = None
+            continue
+
+        nawm_path = join(nawm_folder, case_id + '.nii.gz')
+        if not exists(nawm_path):
+            warnings.warn(f'No NAWM mask found for case {case_id}. Skipping but you should check this.')
+        dataset[case_id]['nawm'] = nawm_path
+
+    return dataset
 
 
 if __name__ == '__main__':

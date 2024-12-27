@@ -1,3 +1,5 @@
+import warnings
+
 from monai.config import KeysCollection
 from monai.transforms import MapTransform
 import numpy as np
@@ -36,6 +38,11 @@ class CustomLoadNPZInstanced(MapTransform):
 
                 # if 'center_heatmap' in d.keys():
                 #     d['center_heatmap'] = d['center_heatmap'].astype(np.float32)
+                if 'nawm' in array.keys():
+                    d['nawm'] = array['nawm'].astype(np.float32)
+                else:
+                    warnings.warn("No NAWM mask found", UserWarning)
+                    d['nawm'] = np.ones_like(d['seg'])
                 if (self.get_small_instances and self.get_confluent_instances and
                         'small_objects_and_confluent_instances_classes' in array.keys()):
                     weights = array['small_objects_and_confluent_instances_classes'].astype(np.float32)

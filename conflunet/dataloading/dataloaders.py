@@ -1,3 +1,5 @@
+import os
+from os.path import exists as pexists
 import monai
 from typing import List, Union, Tuple
 
@@ -23,13 +25,18 @@ def get_train_dataloader(folder: str,
                          seed_val=1,
                          get_small_instances=False,
                          get_confluent_instances=False) -> monai.data.DataLoader:
+    if pexists(join(os.path.abspath(os.path.join(folder, os.pardir)),  'shapes')):
+        path_to_shapes_json = join(os.path.abspath(os.path.join(folder, os.pardir)),  'shapes', 'shapes.json')
+    else:
+        path_to_shapes_json = None
     train_transforms = get_train_transforms(seed=seed_val, patch_size=patch_size,
                                             remove_small_instances=remove_small_instances,
                                             voxel_size=voxel_size,
                                             minimum_instance_size=minimum_instance_size,
                                             minimum_size_along_axis=minimum_size_along_axis,
                                             get_small_instances=get_small_instances,
-                                            get_confluent_instances=get_confluent_instances)
+                                            get_confluent_instances=get_confluent_instances,
+                                            path_to_shapes_json=path_to_shapes_json)
     ds = LesionInstancesDataset(folder, case_identifiers,
                                 transforms=train_transforms,
                                 cache_rate=cache_rate)
@@ -163,6 +170,7 @@ if __name__=="__main__":
     import nibabel as nib
     import torch
     import random
+    import time
     seed_val = 1
 
     # seeding
@@ -170,29 +178,42 @@ if __name__=="__main__":
     np.random.seed(seed_val)
     random.seed(seed_val)
 
-    dataset_id = 321
-    fold = 0
+    save_dir = r"/home/mwynen/data/nnUNet/tmp/copy_paste"
+    dataset_id = 322 #321
+    fold = 0 #2
     num_workers = 0
     cache_rate = 0
     train_loader = get_train_dataloader_from_dataset_id_and_fold(dataset_id, fold, num_workers, cache_rate, seed_val)
     print(train_loader)
-    for epoch in range(2):
+    for epoch in range(6):
+        t0 = time.time()
         for i, batch in enumerate(train_loader):
+            print()
+            print(f"---- Epoch {epoch}, batch {i}, time: {time.time()-t0} ----")
             print(i, batch['img'].shape)
-            # save
-            data = np.squeeze(batch['img'][0,0,:,:,:].numpy())
-            seg = np.squeeze(batch['seg'][0,0,:,:,:].numpy())
-            instance_seg = np.squeeze(batch['instance_seg'][0,0,:,:,:].numpy())
-            offsets_x = np.squeeze(batch['offsets'][0,0,:,:,:].numpy())
-            offsets_y = np.squeeze(batch['offsets'][0,1,:,:,:].numpy())
-            offsets_z = np.squeeze(batch['offsets'][0,2,:,:,:].numpy())
+            print()
+            for j in range(batch['img'].shape[0]):
+                # save
+                data = np.squeeze(batch['img'][j,0,:,:,:].numpy())
+                data2 = np.squeeze(batch['img'][j,1,:,:,:].numpy())
+                seg = np.squeeze(batch['seg'][j,0,:,:,:].numpy())
+                instance_seg = np.squeeze(batch['instance_seg'][j,0,:,:,:].numpy())
+                offsets_x = np.squeeze(batch['offsets'][j,0,:,:,:].numpy())
+                offsets_y = np.squeeze(batch['offsets'][j,1,:,:,:].numpy())
+                offsets_z = np.squeeze(batch['offsets'][j,2,:,:,:].numpy())
+                nawm = np.squeeze(batch['nawm'][j,0,:,:,:].numpy())
+                brainmask = np.squeeze(batch['brainmask'][j,0,:,:,:].numpy())
 
-            nib.save(nib.Nifti1Image(data, np.eye(4)), f"epoch_{epoch}_img_{i}.nii.gz")
-            nib.save(nib.Nifti1Image(seg, np.eye(4)), f"epoch_{epoch}_seg_{i}.nii.gz")
-            nib.save(nib.Nifti1Image(instance_seg, np.eye(4)), f"epoch_{epoch}_instance_seg_{i}.nii.gz")
-            nib.save(nib.Nifti1Image(offsets_x, np.eye(4)), f"epoch_{epoch}_offsets_x_{i}.nii.gz")
-            nib.save(nib.Nifti1Image(offsets_y, np.eye(4)), f"epoch_{epoch}_offsets_y_{i}.nii.gz")
-            nib.save(nib.Nifti1Image(offsets_z, np.eye(4)), f"epoch_{epoch}_offsets_z_{i}.nii.gz")
+                nib.save(nib.Nifti1Image(data, np.eye(4)), join(save_dir, f"epoch_{epoch}_img_{i}_{j}.nii.gz"))
+                nib.save(nib.Nifti1Image(data2, np.eye(4)), join(save_dir, f"epoch_{epoch}_img2_{i}_{j}.nii.gz"))
+                nib.save(nib.Nifti1Image(seg, np.eye(4)), join(save_dir, f"epoch_{epoch}_seg_{i}_{j}.nii.gz"))
+                nib.save(nib.Nifti1Image(instance_seg, np.eye(4)), join(save_dir, f"epoch_{epoch}_instance_seg_{i}_{j}.nii.gz"))
+                nib.save(nib.Nifti1Image(offsets_x, np.eye(4)), join(save_dir, f"epoch_{epoch}_offsets_x_{i}_{j}.nii.gz"))
+                nib.save(nib.Nifti1Image(offsets_y, np.eye(4)), join(save_dir, f"epoch_{epoch}_offsets_y_{i}_{j}.nii.gz"))
+                nib.save(nib.Nifti1Image(offsets_z, np.eye(4)), join(save_dir, f"epoch_{epoch}_offsets_z_{i}_{j}.nii.gz"))
+                nib.save(nib.Nifti1Image(nawm, np.eye(4)), join(save_dir, f"epoch_{epoch}_nawm_{i}_{j}.nii.gz"))
+                nib.save(nib.Nifti1Image(brainmask, np.eye(4)), join(save_dir, f"epoch_{epoch}_brainmask_{i}_{j}.nii.gz"))
 
-            break
+            if i > 4:
+                break
     print("Done!")

@@ -42,7 +42,7 @@ def extract_image_patch(image, instance_seg, instance_id):
     min_y, max_y = mask_indices[1].min(), mask_indices[1].max()
     min_z, max_z = mask_indices[2].min(), mask_indices[2].max()
 
-    image_patch = image[min_x:max_x + 1, min_y:max_y + 1, min_z:max_z + 1]
+    image_patch = image[:, min_x:max_x + 1, min_y:max_y + 1, min_z:max_z + 1]
 
     return image_patch
 
@@ -62,7 +62,7 @@ def make_shape_dictionary(dataset_id: int) -> dict:
         print(f"Processing {case_id}...")
         data = np.load(pjoin(preprocessed_dir, filename))
 
-        image = data["data"][0]
+        image = data["data"]
         instance_seg = data["instance_seg"][0]
         small_objects = data["small_object_classes"][0]
         confluent_instances = data["confluent_instances"][0]
@@ -71,6 +71,9 @@ def make_shape_dictionary(dataset_id: int) -> dict:
                 continue
 
             binary_patch = extract_patch(instance_seg, instance_id)
+            if np.any([d < 2 for d in binary_patch.shape]):
+                print("Skipping small instance")
+                continue
             image_patch = extract_image_patch(image, instance_seg, instance_id)
             # out_file = pjoin(output_dir, f"{case_id}_{instance_id}.npy")
             # np.save(out_file, binary_patch)
@@ -98,6 +101,7 @@ def make_shape_dictionary(dataset_id: int) -> dict:
                 "is_too_small": int(is_too_small),
                 "is_confluent": int(is_confluent),
                 "volume": int(binary_patch.sum()) * np.prod(voxel_size),
+                "avg_lesion_intensity": tuple([float(x) for x in (image_patch * binary_patch).mean(axis=(1, 2, 3))]),
             })
 
     with open(pjoin(output_dir, "shapes.json"), "w") as f:

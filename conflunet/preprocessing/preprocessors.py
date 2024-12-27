@@ -34,6 +34,8 @@ from nnunetv2.utilities.plans_handling.plans_handler import PlansManager, Config
 from nnunetv2.utilities.utils import get_filenames_of_train_images_and_targets, get_identifiers_from_splitted_dataset_folder, \
     create_lists_from_splitted_dataset_folder
 
+from conflunet.preprocessing.utils import update_dataset_with_train_nawm_masks
+
 
 class InstanceSegProcessor(DefaultPreprocessor):
     def __init__(self, verbose: bool = True,
@@ -83,11 +85,18 @@ class InstanceSegProcessor(DefaultPreprocessor):
         mapping[0] = 0
         return np.vectorize(mapping.get)(instance_seg)
 
-    def run_case_npy(self, data: np.ndarray, seg: Union[np.ndarray, None], properties: dict,
-                     plans_manager: PlansManager, configuration_manager: ConfigurationManager,
+    def run_case_npy(self, data: np.ndarray,
+                     seg: Union[Tuple[Union[np.ndarray, None], Union[np.ndarray, None]], Union[np.ndarray, None]],
+                     properties: dict, plans_manager: PlansManager, configuration_manager: ConfigurationManager,
                      dataset_json: Union[dict, str]):
         # let's not mess up the inputs!
         data = data.astype(np.float32)  # this creates a copy
+
+        if isinstance(seg, tuple):
+            seg, nawm = seg
+        else:
+            nawm = None
+
         instance_seg = seg
         if seg is not None:
             assert data.shape[1:] == seg.shape[1:], "Shape mismatch between image and segmentation. \
@@ -100,20 +109,22 @@ class InstanceSegProcessor(DefaultPreprocessor):
                 instance_seg = instance_seg.astype(np.int8)
 
         has_seg = seg is not None
+        has_nawm = nawm is not None
 
         # apply transpose_forward, this also needs to be applied to the spacing!
         data = data.transpose([0, *[i + 1 for i in plans_manager.transpose_forward]])
         if has_seg:
             seg = seg.transpose([0, *[i + 1 for i in plans_manager.transpose_forward]])
             instance_seg = instance_seg.transpose([0, *[i + 1 for i in plans_manager.transpose_forward]])
+        if has_nawm:
+            nawm = nawm.transpose([0, *[i + 1 for i in plans_manager.transpose_forward]])
         original_spacing = [properties['spacing'][i] for i in plans_manager.transpose_forward]
 
         # crop, remember to store size before cropping!
         shape_before_cropping = data.shape[1:]
         properties['shape_before_cropping'] = shape_before_cropping
         # this command will generate a segmentation. This is important because of the nonzero mask which we may need
-        data, seg, instance_seg, bbox = crop_to_nonzero(data, seg,
-                                                        instance_seg)  # crop_to_nonzero has been modified, look in utils.py
+        data, seg, nawm, instance_seg, bbox = crop_to_nonzero(data, seg, nawm, instance_seg)  # crop_to_nonzero has been modified, look in utils.py
         properties['bbox_used_for_cropping'] = bbox
         # print(data.shape, seg.shape)
         properties['shape_after_cropping_and_before_resampling'] = data.shape[1:]
@@ -140,6 +151,7 @@ class InstanceSegProcessor(DefaultPreprocessor):
         seg = configuration_manager.resampling_fn_seg(seg, new_shape, original_spacing, target_spacing) if has_seg else None
         instance_seg = configuration_manager.resampling_fn_seg(instance_seg, new_shape, original_spacing,
                                                                target_spacing) if has_seg else None
+        nawm = configuration_manager.resampling_fn_seg(nawm, new_shape, original_spacing, target_spacing) if has_nawm else None
         if self.verbose:
             print(f'old shape: {old_shape}, new_shape: {new_shape}, old_spacing: {original_spacing}, '
                   f'new_spacing: {target_spacing}, fn_data: {configuration_manager.resampling_fn_data}')
@@ -191,7 +203,7 @@ class InstanceSegProcessor(DefaultPreprocessor):
         else:
             confluent_instances = None
 
-        return data, seg, instance_seg, (center_heatmap, small_object_classes, confluent_instances)
+        return data, seg, instance_seg, (nawm, center_heatmap, small_object_classes, confluent_instances)
 
     def run_case(self, image_files: List[str], seg_file: Union[str, None], plans_manager: PlansManager,
                  configuration_manager: ConfigurationManager, dataset_json: Union[dict, str]):
@@ -210,24 +222,30 @@ class InstanceSegProcessor(DefaultPreprocessor):
         # load image(s)
         data, data_properties = rw.read_images(image_files)
 
+        seg = nawm = None
         # if possible, load seg
         if seg_file is not None:
-            seg, _ = rw.read_seg(seg_file)
-        else:
-            seg = None
+            if isinstance(seg_file, str):
+                seg, _ = rw.read_seg(seg_file)
+            elif isinstance(seg_file, tuple):
+                seg, _ = rw.read_seg(seg_file[0])
+                nawm, _ = rw.read_seg(seg_file[1]) if seg_file[1] is not None else (None, None)
 
-        data, seg, instance_seg, other = self.run_case_npy(data, seg, data_properties, plans_manager,
+        data, seg, instance_seg, other = self.run_case_npy(data, (seg, nawm), data_properties, plans_manager,
                                                            configuration_manager, dataset_json)
         return data, seg, instance_seg, other, data_properties
 
-    def run_case_save(self, output_filename_truncated: str, image_files: List[str], seg_file: str,
+    def run_case_save(self, output_filename_truncated: str, image_files: List[str], seg_file: Tuple[str, str],
                       plans_manager: PlansManager, configuration_manager: ConfigurationManager,
                       dataset_json: Union[dict, str]):
+        # print(f"{output_filename_truncated=}, \n{image_files=}, \n{seg_file=}, \n{dataset_json=}")
         data, seg, instance_seg, other, properties = self.run_case(image_files, seg_file, plans_manager,
                                                                    configuration_manager, dataset_json)
         # print('dtypes', data.dtype, seg.dtype)
-        center_heatmap, small_object_classes, confluent_instances = other
+        nawm, center_heatmap, small_object_classes, confluent_instances = other
         kwargs = {'data': data, 'seg': seg, 'instance_seg': instance_seg}
+        if nawm is not None:
+            kwargs['nawm'] = nawm
         if center_heatmap is not None:
             kwargs['center_heatmap'] = center_heatmap
         if small_object_classes is not None and confluent_instances is not None:
@@ -273,6 +291,7 @@ class InstanceSegProcessor(DefaultPreprocessor):
         maybe_mkdir_p(output_directory)
 
         dataset = get_filenames_of_train_images_and_targets(join(nnUNet_raw, dataset_name), dataset_json)
+        dataset = update_dataset_with_train_nawm_masks(join(nnUNet_raw, dataset_name), dataset)
         # identifiers = [os.path.basename(i[:-len(dataset_json['file_ending'])]) for i in seg_fnames]
         # output_filenames_truncated = [join(output_directory, i) for i in identifiers]
 
@@ -286,8 +305,8 @@ class InstanceSegProcessor(DefaultPreprocessor):
 
             for k in dataset.keys():
                 r.append(p.starmap_async(self.run_case_save,
-                                         ((join(output_directory, k), dataset[k]['images'], dataset[k]['label'],
-                                           plans_manager, configuration_manager,
+                                         ((join(output_directory, k), dataset[k]['images'], (dataset[k]['label'],
+                                           dataset[k]['nawm']), plans_manager, configuration_manager,
                                            dataset_json),)))
 
             with tqdm(desc=None, total=len(dataset), disable=self.verbose) as pbar:
