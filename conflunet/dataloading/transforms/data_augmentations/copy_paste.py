@@ -315,15 +315,14 @@ class RandCopyPasted(RandomizableTransform, MapTransform):
             self.paste_region_mask_keys = paste_region_mask_keys
         else:
             self.paste_region_mask_keys = [paste_region_mask_keys]
-        match blend_mode:
-            case 'none':
-                self.paste_fn = paste_from_coords_copy_from_image_no_blurring
-            case 'gaussian_outer_borders':
-                self.paste_fn = paste_from_coords_gaussian_blurring_outer_borders
-            case 'gaussian':
-                self.paste_fn = paste_from_coords_gaussian_blurring_full
-            case _:
-                raise ValueError(f"Invalid blend mode: {blend_mode}")
+        if blend_mode == 'none':
+            self.paste_fn = paste_from_coords_copy_from_image_no_blurring
+        elif blend_mode == 'gaussian_outer_borders':
+            self.paste_fn = paste_from_coords_gaussian_blurring_outer_borders
+        elif blend_mode == 'gaussian':
+            self.paste_fn = paste_from_coords_gaussian_blurring_full
+        else:
+            raise ValueError(f"Invalid blend mode: {blend_mode}")
         self.confluence_proportion = confluence_proportion
         with open(path_to_json, 'r') as f:
             self.shapes = json.load(f)
