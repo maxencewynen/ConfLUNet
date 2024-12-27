@@ -13,6 +13,7 @@ from monai.transforms import (
     RandAffined,
     RandSpatialCropd,
     RandCropByPosNegLabeld,
+    Identityd
 )
 
 from conflunet.dataloading.transforms.data_augmentations.copy_paste import RandCopyPasted
@@ -153,7 +154,7 @@ def get_train_transforms(seed: Union[int, None] = None,
             blend_mode='gaussian',
             confluence_proportion=.8,
             path_to_json=path_to_shapes_json
-        ),
+        ) if path_to_shapes_json is not None else Identityd(keys=["img"]),
         *get_nnunet_augmentations(image_key="img", seg_keys=["seg", "instance_seg", 'brainmask'] + additional_keys),
         LesionOffsetTransformd(keys="instance_seg"),
         ToTensord(keys=['img', 'seg', 'offsets', 'center_heatmap', 'brainmask'] + additional_keys),
