@@ -383,18 +383,17 @@ class RandCopyPasted(RandomizableTransform, MapTransform):
             n_far_from_lesion = far_from_lesion.sum()
             if n_close_to_lesion > 0:
                 probability_close_to_lesion = self.confluence_proportion / n_close_to_lesion
+                if n_far_from_lesion > 0:
+                    probability_far_from_lesion = (1 - self.confluence_proportion) / n_far_from_lesion
+                else:
+                    probability_far_from_lesion = 0
+                    probability_close_to_lesion = 1 / n_close_to_lesion
             else:
                 probability_close_to_lesion = 0
                 if n_far_from_lesion > 0:
                     probability_far_from_lesion = 1 / n_far_from_lesion
                 else:
                     continue
-
-            if n_far_from_lesion > 0:
-                probability_far_from_lesion = (1 - self.confluence_proportion) / n_far_from_lesion
-            else:
-                probability_far_from_lesion = 0
-                probability_close_to_lesion = 1 / n_close_to_lesion
 
             assert np.isclose((n_close_to_lesion * probability_close_to_lesion) +
                               (n_far_from_lesion * probability_far_from_lesion), 1.0, atol=1e-7)
