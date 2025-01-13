@@ -1,4 +1,4 @@
-numpy
+numpy==1.26.4
 nnunetv2==2.5.1
 monai==0.9.1
 nibabel==4.0.1
