@@ -121,8 +121,6 @@ class TrainingPipeline:
                 "Validation Metrics/Panoptic Quality": (panoptic_quality, False), # False means it needs instance segmentation
             }
 
-        self.scaler = torch.cuda.amp.GradScaler()
-
     def get_dataloaders(self) -> Tuple[DataLoader, DataLoader]:
         train_loader = get_train_dataloader_from_dataset_id_and_fold(self.dataset_id, self.fold,
                                                                      num_workers=self.num_workers,
@@ -167,6 +165,7 @@ class TrainingPipeline:
         #self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.n_epochs)
         #self.lr_scheduler = PolyLRScheduler(self.optimizer, self.learning_rate, self.n_epochs)
         self.start_epoch = 0
+        self.scaler = torch.cuda.amp.GradScaler()
 
         if os.path.exists(self.checkpoint_filename) and not self.force_restart:
             checkpoint = torch.load(self.checkpoint_filename)
@@ -175,6 +174,7 @@ class TrainingPipeline:
             self.optimizer.load_state_dict(checkpoint['optimizer'])
             self.lr_scheduler.load_state_dict(checkpoint["scheduler"])
             self.best_metrics = checkpoint["best_metrics"]
+            self.scaler.load_state_dict(checkpoint["scaler"])
 
             if not self.wandb_ignore:
                 self.wandb_run_id = checkpoint['wandb_run_id']
@@ -370,6 +370,7 @@ class TrainingPipeline:
                 'optimizer': self.optimizer.state_dict(),
                 'wandb_run_id': self.wandb_run_id,
                 'scheduler': self.lr_scheduler.state_dict(),
+                'scaler': self.scaler.state_dict(),
                 'best_metrics': self.best_metrics
             }, checkpoint_filename)
 
