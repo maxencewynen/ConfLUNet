@@ -6,7 +6,8 @@ ConfLUNet is a deep learning model that performs instance segmentation of multip
 
 ## How to get started?
 
-* [Installation instruction](conflunet/docs/installation_instructions.md)
+* [Installation instruction](conflunet/docs/installation_instructions.md) or follow the docker instructions below to avoid installing the dependencies yourself.
+* [Docker instructions](conflunet/docs/docker_instructions.md)
 * [Dataset format](https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/dataset_format.md) (following nnUNet)  
 * [Usage instructions](conflunet/docs/how_to_use_conflunet.md) 
 

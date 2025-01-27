@@ -64,7 +64,7 @@ homepage = "https://github.com/maxencewynen/ConfLUNet"
 repository = "https://github.com/maxencewynen/ConfLUNet"
 
 [project.scripts]
-conflunet_plan_and_preprocess = "conflunet.preprocessing.plan_and_preeprocess_entrypoints:plan_and_preprocess_entry"
+conflunet_plan_and_preprocess = "conflunet.preprocessing.plan_and_preprocess_entrypoints:plan_and_preprocess_entry"
 conflunet_extract_fingerprint = "conflunet.preprocessing.plan_and_preprocess_entrypoints:extract_fingerprint_entry"
 conflunet_plan_experiment = "conflunet.preprocessing.plan_and_preprocess_entrypoints:plan_experiment_entry"
 conflunet_preprocess = "conflunet.preprocessing.plan_and_preprocess_entrypoints:preprocess_entry"
