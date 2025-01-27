@@ -362,7 +362,7 @@ class TrainingPipeline:
             print(f"{key}: {avg_val_losses[key]:.4f}")
 
     def save_checkpoint(self, epoch: int, checkpoint_filename: str = None) -> None:
-        if not self.debug and not self.wandb_ignore:
+        if not self.debug: #and not self.wandb_ignore:
             checkpoint_filename = checkpoint_filename or self.checkpoint_filename
             torch.save({
                 'epoch': epoch + 1,
