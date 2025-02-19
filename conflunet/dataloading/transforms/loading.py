@@ -1,10 +1,13 @@
+import numpy as np
+from pickle import load
+from os.path import exists as pexists
+from scipy.ndimage import center_of_mass
+
 from monai.config import KeysCollection
 from monai.transforms import MapTransform
-import numpy as np
-from os.path import exists as pexists
-from pickle import load
+from monai.data.meta_tensor import MetaTensor
+
 from conflunet.postprocessing.small_instances_removal import remove_small_lesions_from_instance_segmentation
-from scipy.ndimage import center_of_mass
 
 
 class CustomLoadNPZInstanced(MapTransform):
@@ -23,16 +26,16 @@ class CustomLoadNPZInstanced(MapTransform):
         d = dict(data)
         for key in self.key_iterator(d):
             array = np.load(d[key], allow_pickle=False)
-            d['img'] = array['data'].astype(np.float32)
+            d['img'] = MetaTensor(array['data'].astype(np.float32))
             if not self.test:
                 # casting the segmentation in np.float32 otherwise there is a weird collate error with monai
-                d['instance_seg'] = array['instance_seg'].astype(np.float32)  
-                d['seg'] = (array['seg'] > 0).astype(np.float32)
+                d['instance_seg'] = MetaTensor(array['instance_seg'].astype(np.float32))
+                d['seg'] = MetaTensor((array['seg'] > 0).astype(np.float32))
 
                 # brainmask includes brain and lesions, area around the brain is considered background
                 # Not to confuse with other cases (like for RandCropByPosNegLabeld) where the foreground only includes the lesions
                 # Notice the >= instead of >, as nnUNet preprocessing makes the actual background to be =-1
-                d['brainmask'] = (array['seg'] >= 0).astype(np.float32)
+                d['brainmask'] = MetaTensor((array['seg'] >= 0).astype(np.float32))
 
                 # if 'center_heatmap' in d.keys():
                 #     d['center_heatmap'] = d['center_heatmap'].astype(np.float32)
@@ -43,19 +46,19 @@ class CustomLoadNPZInstanced(MapTransform):
                     weights[weights == 2] = 3  # large, confluent
                     weights[weights == 3] = 3  # small, not confluent
                     weights[weights == 4] = 3  # small, confluent
-                    d['weights'] = weights
+                    d['weights'] = MetaTensor(weights)
                 elif self.get_small_instances and 'small_object_classes' in array.keys():
                     weights = array['small_object_classes'].astype(np.float32)
                     weights[weights == 2] = 3  # small
-                    d['weights'] = weights
+                    d['weights'] = MetaTensor(weights)
                 elif self.get_confluent_instances and 'confluent_instances' in array.keys():
                     weights = array['confluent_instances'].astype(np.float32)
                     weights[weights == 2] = 1  # confluent
-                    d['weights'] = weights
+                    d['weights'] = MetaTensor(weights)
             elif 'seg' in d.keys():
-                d['brainmask'] = (d['seg'] >= 0).astype(np.float32)
+                d['brainmask'] = MetaTensor((d['seg'] >= 0).astype(np.float32))
             elif 'brainmask' in d.keys():
-                d['brainmask'] = d['brainmask'].astype(np.float32)
+                d['brainmask'] = MetaTensor(d['brainmask'].astype(np.float32))
 
             properties_file = d['properties_file']
             if not pexists(properties_file):
