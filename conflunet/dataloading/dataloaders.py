@@ -47,7 +47,7 @@ def get_val_dataloader(folder: str,
                        num_workers=0,
                        cache_rate=1.0,
                        seed_val=1) -> monai.data.DataLoader:
-    val_transforms = get_train_transforms(seed=seed_val, patch_size=patch_size,
+    val_transforms = get_val_transforms(seed=seed_val, patch_size=patch_size,
                                           remove_small_instances=remove_small_instances,
                                           voxel_size=voxel_size,
                                           minimum_instance_size=minimum_instance_size,
