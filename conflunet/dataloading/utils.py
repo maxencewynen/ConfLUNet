@@ -33,10 +33,25 @@ def get_nnunet_spatial_transforms(image_key: str = "img",
         RandAffined(
             keys=keys,
             mode=interpolation,
-            prob=0.2, 
+            prob=0.2,
+            spatial_size=spatial_size,
+            scale_range=((-0.3, 0.4),) * 3,
+            padding_mode='zeros'
+            ),
+        RandAffined(
+            keys=keys,
+            mode=interpolation,
+            prob=0.2,
             spatial_size=spatial_size,
             rotate_range=(0.52, ) * 3,
-            scale_range=((-0.3, 0.4),) * 3,
+            padding_mode='zeros'
+            ),
+        RandAffined(
+            keys=keys,
+            mode=interpolation,
+            prob=0.2,
+            spatial_size=spatial_size,
+            translate_range=(10, ) * 3,
             padding_mode='zeros'
             ),
         ]
@@ -86,20 +101,19 @@ def get_nnunet_augmentations(image_key: str = "img", seg_keys: Sequence[str] = (
     # This should be equivalent to batchgeneratorsv2.transforms.intensity.gamma.GammaTransform
     # In nnUNet, GammaTransform is called twice with p_invert_image=0 and 1
     # https://github.com/MIC-DKFZ/nnUNet/blob/fee8c2db4a52405389eb5d3c4512bd2f654ab999/nnunetv2/training/nnUNetTrainer/nnUNetTrainer.py#L29
-    # This gives weir results, so commented out for now
-    # transforms.append(
-    #     RandAdjustContrastd(
-    #         keys=image_key, gamma=(-0.3, 0.5), prob=0.15,
-    #         invert_image=True, retain_stats=True
-    #     )
-    # )
+    transforms.append(
+        RandAdjustContrastd(
+            keys=image_key, gamma=(0.7, 1.5), prob=0.1,
+            invert_image=True, retain_stats=True
+        )
+    )
 
-    #transforms.append(
-    #    RandAdjustContrastd(
-    #        keys=image_key, gamma=(0.0, 0.01), prob=.3,
-    #        invert_image=False, retain_stats=True
-    #    )
-    #)
+    transforms.append(
+        RandAdjustContrastd(
+            keys=image_key, gamma=(0.7, 1.5), prob=.3,
+            invert_image=False, retain_stats=True
+        )
+    )
 
     # Random mirroring
     transforms.append(

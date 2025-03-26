@@ -71,6 +71,8 @@ def recall(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: list 
 
     tp = len(matched_pairs)
     fn = len(unmatched_ref)
+    if tp == 0 and fn == 0:
+        return 1.0
     return tp / (tp + fn + 1e-6)
 
 
@@ -100,6 +102,8 @@ def precision(pred: np.ndarray = None, ref: np.ndarray = None, matched_pairs: li
 
     tp = len(matched_pairs)
     fp = len(unmatched_pred)
+    if tp == 0 and fp == 0:
+        return 1.0
     return tp / (tp + fp + 1e-6)
 
 

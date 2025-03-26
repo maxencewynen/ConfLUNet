@@ -11,7 +11,7 @@ from conflunet.evaluation.utils import save_metrics
 from conflunet.postprocessing.small_instances_removal import remove_small_lesions_from_instance_segmentation
 
 
-def evaluate_single_prediction(pred_file, ref_file):
+def evaluate_single_prediction(pred_file, ref_file, verbose=False):
     instance_seg_pred = nib.load(pred_file)
     voxel_size_pred = instance_seg_pred.header["pixdim"][1:4]
     instance_seg_pred = instance_seg_pred.get_fdata()
@@ -30,7 +30,7 @@ def evaluate_single_prediction(pred_file, ref_file):
         instance_seg_pred,
         instance_seg_ref,
         voxel_size=voxel_size_ref,
-        verbose=args.verbose
+        verbose=verbose
     )
 
 
@@ -67,7 +67,7 @@ def main(args):
             raise ValueError(f"`pred` argument is a file while `ref` argument is a directory ({args.pred}, {args.ref})")
 
         case_identifier = os.path.basename(args.ref).replace('.nii.gz', '')
-        metrics, pred_matches, ref_matches = evaluate_single_prediction(args.pred, args.ref)
+        metrics, pred_matches, ref_matches = evaluate_single_prediction(args.pred, args.ref, verbose=args.verbose)
         save_dir = os.path.dirname(args.pred)
 
         all_metrics[case_identifier] = metrics
@@ -89,7 +89,7 @@ def main(args):
             ref_file = pjoin(reference_dir, ref_file)
             case_identifier = os.path.basename(ref_file).replace('.nii.gz', '')
 
-            metrics, pred_matches, ref_matches = evaluate_single_prediction(pred_file, ref_file)
+            metrics, pred_matches, ref_matches = evaluate_single_prediction(pred_file, ref_file, verbose=args.verbose)
 
             all_metrics[case_identifier] = metrics
             all_pred_matches[case_identifier] = pred_matches

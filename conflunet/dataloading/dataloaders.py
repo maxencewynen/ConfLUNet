@@ -47,7 +47,7 @@ def get_val_dataloader(folder: str,
                        num_workers=0,
                        cache_rate=1.0,
                        seed_val=1) -> monai.data.DataLoader:
-    val_transforms = get_train_transforms(seed=seed_val, patch_size=patch_size,
+    val_transforms = get_val_transforms(seed=seed_val, patch_size=patch_size,
                                           remove_small_instances=remove_small_instances,
                                           voxel_size=voxel_size,
                                           minimum_instance_size=minimum_instance_size,
@@ -176,7 +176,7 @@ if __name__=="__main__":
     cache_rate = 0
     train_loader = get_train_dataloader_from_dataset_id_and_fold(dataset_id, fold, num_workers, cache_rate, seed_val)
     print(train_loader)
-    for epoch in range(2):
+    for epoch in range(8):
         for i, batch in enumerate(train_loader):
             print(i, batch['img'].shape)
             # save
@@ -188,11 +188,11 @@ if __name__=="__main__":
             offsets_z = np.squeeze(batch['offsets'][0,2,:,:,:].numpy())
 
             nib.save(nib.Nifti1Image(data, np.eye(4)), f"epoch_{epoch}_img_{i}.nii.gz")
-            nib.save(nib.Nifti1Image(seg, np.eye(4)), f"epoch_{epoch}_seg_{i}.nii.gz")
-            nib.save(nib.Nifti1Image(instance_seg, np.eye(4)), f"epoch_{epoch}_instance_seg_{i}.nii.gz")
-            nib.save(nib.Nifti1Image(offsets_x, np.eye(4)), f"epoch_{epoch}_offsets_x_{i}.nii.gz")
-            nib.save(nib.Nifti1Image(offsets_y, np.eye(4)), f"epoch_{epoch}_offsets_y_{i}.nii.gz")
-            nib.save(nib.Nifti1Image(offsets_z, np.eye(4)), f"epoch_{epoch}_offsets_z_{i}.nii.gz")
+            # nib.save(nib.Nifti1Image(seg, np.eye(4)), f"epoch_{epoch}_seg_{i}.nii.gz")
+            # nib.save(nib.Nifti1Image(instance_seg, np.eye(4)), f"epoch_{epoch}_instance_seg_{i}.nii.gz")
+            # nib.save(nib.Nifti1Image(offsets_x, np.eye(4)), f"epoch_{epoch}_offsets_x_{i}.nii.gz")
+            # nib.save(nib.Nifti1Image(offsets_y, np.eye(4)), f"epoch_{epoch}_offsets_y_{i}.nii.gz")
+            # nib.save(nib.Nifti1Image(offsets_z, np.eye(4)), f"epoch_{epoch}_offsets_z_{i}.nii.gz")
 
-            break
+            # break
     print("Done!")

@@ -7,13 +7,15 @@ from scipy.ndimage import label, binary_dilation
 from typing import List, Tuple, Dict
 from conflunet.postprocessing.utils import convert_types
 
-METRICS_TO_AVERAGE = ["PQ", "DSC", "nDSC", "F1", "Recall", "Precision", "FPR", "Dice_Per_TP", "DiC", "Recall_CLU", "Precision_CLU", "Dice_Per_TP_CLU"]
+METRICS_TO_AVERAGE = ["PQ", "DSC", "nDSC", "F1", "Recall", "Precision", "FPR", "Dice_Per_TP", "DiC", "F1_CLU",
+                      "Recall_CLU", "Precision_CLU", "Dice_Per_TP_CLU", "PQ_CLU"]
 METRICS_TO_AVERAGE += [f"{metric}_tier_1" for metric in METRICS_TO_AVERAGE if "CLU" in metric]
 METRICS_TO_AVERAGE += [f"{metric}_tier_2" for metric in METRICS_TO_AVERAGE if "CLU" in metric and "tier_1" not in metric]
 
-METRICS_TO_SUM = ["TP", "FP", "FN", "Pred_Lesion_Count", "Ref_Lesion_Count", "CLU_Count", "TP_CLU"]
+METRICS_TO_SUM = ["TP", "FP", "FN", "Pred_Lesion_Count", "Ref_Lesion_Count", "CLU_Count", "TP_CLU", "FN_CLU"]
 METRICS_TO_SUM += [f"{metric}_tier_1" for metric in METRICS_TO_SUM if "CLU" in metric]
 METRICS_TO_SUM += [f"{metric}_tier_2" for metric in METRICS_TO_SUM if "CLU" in metric and "tier_1" not in metric]
+METRICS_TO_SUM += ["FP_CLU"]
 
 
 def intersection_over_union(pred_mask: np.ndarray, ref_mask: np.ndarray) -> float:
@@ -100,7 +102,8 @@ def match_instances(
         pred: np.ndarray,
         ref: np.ndarray,
         threshold: float = 0.1,
-        return_iou: bool = False
+        return_iou: bool = False,
+        return_removed_matched_pred: bool = False
 ) -> (List[Tuple[int, int]], List[int], List[int]):
     """
     Match predicted instances to reference instances based on Intersection over Union (IoU) threshold.
@@ -117,7 +120,10 @@ def match_instances(
         Tuple: A tuple containing three lists:
                - matched_pairs: List of tuples (pred_id, ref_id) indicating matched instance pairs. If return_iou is True,
                                  the tuple will be (pred_id, ref_id, iou).
-               - unmatched_pred: List of unmatched predicted instance ids (FP).
+               - removed_matched_pred: List of tuples (pred_id, ref_id) indicating matched instance pairs that were
+                                             removed due to lower IoU with another reference instance.
+               - unmatched_pred: List of all falsely predicted instance ids (FP). (includes pred instances from
+                                             removed_matched_pred)
                - unmatched_ref: List of unmatched reference instance ids (FN).
     """
     assert pred.shape == ref.shape, f"Shapes of pred and ref do not match ({pred.shape} != {ref.shape})."
@@ -162,11 +168,17 @@ def match_instances(
 
     if not return_iou:
         matched_pairs = [(x[0], x[1]) for x in matched_pairs]
+        removed_matched_pred = [(x[0], x[1]) for x in removed_pairs]
+    else:
+        removed_matched_pred = removed_pairs
 
     for ref_id in unique_refs:
         if ref_id == 0 or ref_id in [x[1] for x in matched_pairs]:
             continue
         unmatched_ref.append(ref_id)
+
+    if return_removed_matched_pred:
+        return matched_pairs, removed_matched_pred, unmatched_pred, unmatched_ref
 
     return matched_pairs, unmatched_pred, unmatched_ref
 

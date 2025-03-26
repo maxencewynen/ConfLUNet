@@ -21,6 +21,8 @@ def compress_model(dataset_id, model_name, output_dir):
          pjoin(output_dir, 'tmp', 'nnUNet_preprocessed', dataset_name))
     copy(pjoin(nnUNet_preprocessed, dataset_name, 'dataset.json'),
          pjoin(output_dir, 'tmp', 'nnUNet_preprocessed', dataset_name))
+    copy(pjoin(nnUNet_preprocessed, dataset_name, 'dataset.json'),
+         pjoin(output_dir, 'tmp', 'nnUNet_raw', dataset_name))
 
     copytree(pjoin(nnUNet_results, dataset_name, model_name),
          pjoin(output_dir, 'tmp', 'nnUNet_results', dataset_name, model_name), dirs_exist_ok=True)
