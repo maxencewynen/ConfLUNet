@@ -55,10 +55,14 @@ def compute_metrics(
     ###########################################
     metrics = {}
     vprint(verbose, f"[INFO] Matching instances...")
-    matched_pairs_iou, unmatched_pred, unmatched_ref = match_instances(instance_pred, instance_ref, return_iou=True)
+    matched_pairs_iou, removed_matched_pred, unmatched_pred, unmatched_ref = \
+        match_instances(instance_pred, instance_ref, return_iou=True, return_removed_matched_pred=True)
     matched_pairs = [(pred_id, ref_id) for pred_id, ref_id, iou in matched_pairs_iou]
     matched_pairs_iou = {(p, r): iou for p, r, iou in matched_pairs_iou}
-    vprint(verbose, f"[INFO] Found {len(matched_pairs)} matched pairs, {len(unmatched_pred)} unmatched predicted instances, "
+    removed_matched_pred = [x[0] for x in removed_matched_pred]
+    vprint(verbose, f"[INFO] Found {len(matched_pairs)} matched pairs, "
+                    f"{len(removed_matched_pred)} removed matched predicted instances (FP CLU), "
+                    f"{len(unmatched_pred)} unmatched predicted instances, "
                     f"and {len(unmatched_ref)} unmatched reference instances.")
 
     ### Compute metrics ###
@@ -100,6 +104,7 @@ def compute_metrics(
     metrics["FP"] = FP
     metrics["FN"] = FN
     metrics["FPR"] = FP / (pred_count + 1e-6)
+    metrics["FP_CLU"] = len(removed_matched_pred)
 
     # Recall and Precision
     recall_val = recall(matched_pairs=matched_pairs, unmatched_ref=unmatched_ref)
@@ -129,26 +134,39 @@ def compute_metrics(
             if id not in cl_ids:
                 confluents_instance_ref[confluents_instance_ref == id] = 0
 
-        matched_pairs_cl, unmatched_pred_cl, unmatched_ref_cl = match_instances(instance_pred, confluents_instance_ref)
+        matched_pairs_cl, _, unmatched_ref_cl = match_instances(instance_pred, confluents_instance_ref)
 
-        clm = len(cl_ids)
+        n_cl = len(cl_ids)
         added_string = f"_tier_{tier}" if tier > 0 else ""
-        metrics["CLU_Count"+added_string] = clm
-        if clm == 0:
-            metrics["Recall_CLU"+added_string] = np.nan
-            metrics["Precision_CLU"+added_string] = np.nan
+        metrics["CLU_Count"+added_string] = n_cl
+        if n_cl == 0:
+            metrics["Recall_CLU"+added_string] = 1.0
             metrics["Dice_Per_TP_CLU"+added_string] = np.nan
-            metrics["TP_CLU"+added_string] = np.nan
+            metrics["TP_CLU"+added_string] = 0
+            metrics["FN_CLU"+added_string] = 0
         else:
             clr = recall(matched_pairs=matched_pairs_cl, unmatched_ref=unmatched_ref_cl)
-            clp = precision(matched_pairs=matched_pairs_cl, unmatched_pred=unmatched_pred_cl)
             metrics['TP_CLU'+added_string] = len(matched_pairs_cl)
+            metrics['FN_CLU'+added_string] = len(unmatched_ref_cl)
             metrics["Recall_CLU"+added_string] = clr
-            metrics["Precision_CLU"+added_string] = clp
 
             dice_scores_cl = dice_per_tp(instance_pred, confluents_instance_ref, matched_pairs_cl)
             avg_dice_cl = sum(dice_scores_cl) / len(dice_scores_cl) if dice_scores_cl else 0
             metrics["Dice_Per_TP_CLU"+added_string] = avg_dice_cl
+
+        if n_cl == 0 and metrics["FP_CLU"] == 0:
+            metrics["Precision_CLU"+added_string] = 1.0
+        else:
+            tp_clu = metrics['TP_CLU'+added_string]
+            fp_clu = metrics["FP_CLU"]
+            metrics["Precision_CLU"+added_string] = tp_clu / (tp_clu + fp_clu + 1e-6)
+
+        clr, clp = metrics["Recall_CLU"+added_string], metrics["Precision_CLU"+added_string]
+        metrics["F1_CLU"+added_string] = 2 * (clr * clp) / (clr + clp + 1e-6) # if both are 0, f1_cl is 0
+        metrics["PQ_CLU" + added_string] = panoptic_quality(pred=instance_pred, ref=confluents_instance_ref,
+                                                            matched_pairs=matched_pairs_cl,
+                                                            unmatched_pred=removed_matched_pred,
+                                                            unmatched_ref=unmatched_ref_cl)
 
     ###########################################
     ## Per lesion match & volume information ##
