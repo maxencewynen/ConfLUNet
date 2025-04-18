@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 from typing import Dict, Tuple
-from scipy.ndimage import label
 from scipy.spatial.distance import cdist
+from scipy.ndimage import label, generate_binary_structure
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 
 from monai.config.type_definitions import NdarrayOrTensor
@@ -50,6 +50,7 @@ class ACLSPostprocessor(Postprocessor):
             minimum_instance_size: int = 0,
             minimum_size_along_axis: int = 0,
             voxel_spacing: Tuple[float, float, float] = (1, 1, 1),
+            connectivity: int = 26,
             semantic_threshold: float = 0.5,
             sigma: float = 1.0,
             device: torch.device = None,
@@ -66,6 +67,7 @@ class ACLSPostprocessor(Postprocessor):
             verbose=verbose
         )
         self.sigma = sigma
+        self.connectivity = connectivity
 
     def compute_hessian_eigenvalues(self, image):
         """
@@ -145,7 +147,16 @@ class ACLSPostprocessor(Postprocessor):
         eigenvalues = self.compute_hessian_eigenvalues(np.squeeze(masked_data))
         instance_centers_mask = np.all(eigenvalues < 0, axis=0)
 
-        instance_centers_clusters, n_clusters = label(instance_centers_mask)
+        if self.connectivity == 6:
+            structure = generate_binary_structure(3, 1)
+        elif self.connectivity == 18:
+            structure = generate_binary_structure(3, 2)
+        elif self.connectivity == 26:
+            structure = np.ones((3, 3, 3), dtype=bool)
+        else:
+            raise ValueError("Invalid connectivity value. Use 6, 18 or 26.")
+
+        instance_centers_clusters, n_clusters = label(instance_centers_mask, structure)
 
         # Identify unlabelled voxels in binary image and assign nearest instance labels
         unlabelled_voxels = np.logical_and(binary_pred == 1, instance_centers_clusters == 0)
