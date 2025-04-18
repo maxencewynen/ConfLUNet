@@ -5,6 +5,7 @@ import numpy as np
 import nibabel as nib
 from pprint import pprint
 from os.path import join as pjoin
+from multiprocessing import Pool
 
 from conflunet.evaluation.metrics import compute_metrics
 from conflunet.evaluation.utils import save_metrics
@@ -12,6 +13,7 @@ from conflunet.postprocessing.small_instances_removal import remove_small_lesion
 
 
 def evaluate_single_prediction(pred_file, ref_file, verbose=False):
+    print(f"Evaluating {pred_file}")
     instance_seg_pred = nib.load(pred_file)
     voxel_size_pred = instance_seg_pred.header["pixdim"][1:4]
     instance_seg_pred = instance_seg_pred.get_fdata()
@@ -57,7 +59,7 @@ def find_matching_prediction_file(predictions_dir, ref_file):
     return matching_pred_file[0]
 
 
-def main(args):
+def main_no_mp(args):
     all_metrics = {}
     all_pred_matches = {}
     all_ref_matches = {}
@@ -102,12 +104,69 @@ def main(args):
     print(f"Saved metrics files in {save_dir}")
 
 
+def process_case(args_tuple):
+    pred_file, ref_file, verbose = args_tuple
+    case_identifier = os.path.basename(ref_file).replace('.nii.gz', '')
+    metrics, pred_matches, ref_matches = evaluate_single_prediction(pred_file, ref_file, verbose=verbose)
+    return case_identifier, metrics, pred_matches, ref_matches
+
+def main(args):
+    all_metrics = {}
+    all_pred_matches = {}
+    all_ref_matches = {}
+
+    if os.path.isfile(args.pred):
+        if not os.path.isfile(args.ref):
+            raise ValueError(f"`pred` argument is a file while `ref` argument is a directory ({args.pred}, {args.ref})")
+
+        case_identifier = os.path.basename(args.ref).replace('.nii.gz', '')
+        metrics, pred_matches, ref_matches = evaluate_single_prediction(args.pred, args.ref, verbose=args.verbose)
+        save_dir = os.path.dirname(args.pred)
+
+        all_metrics[case_identifier] = metrics
+        all_pred_matches[case_identifier] = pred_matches
+        all_ref_matches[case_identifier] = ref_matches
+
+    else:
+        predictions_dir = args.pred
+        reference_dir = args.ref
+        if not os.path.isdir(reference_dir):
+            raise ValueError(f"`pred` argument is a directory while `ref` argument is a file ({args.pred}, {args.ref})")
+
+        # Liste des cas à traiter
+        tasks = []
+        for ref_file in sorted(os.listdir(reference_dir)):
+            if os.path.isdir(pjoin(reference_dir, ref_file)) or not ref_file.endswith('.nii.gz'):
+                continue
+            pred_file = find_matching_prediction_file(predictions_dir, ref_file)
+            pred_path = pjoin(predictions_dir, pred_file)
+            ref_path = pjoin(reference_dir, ref_file)
+            tasks.append((pred_path, ref_path, args.verbose))
+
+        # Multiprocessing pool
+        with Pool(processes=args.num_workers) as pool:
+            results = pool.map(process_case, tasks)
+
+        # Récupération des résultats
+        for case_identifier, metrics, pred_matches, ref_matches in results:
+            all_metrics[case_identifier] = metrics
+            all_pred_matches[case_identifier] = pred_matches
+            all_ref_matches[case_identifier] = ref_matches
+
+        save_dir = predictions_dir
+
+    pprint(all_metrics)
+    save_metrics(all_metrics, all_pred_matches, all_ref_matches, save_dir=save_dir)
+    print(f"Saved metrics files in {save_dir}")
+
+
 def evaluate_entry_point():
     parser = argparse.ArgumentParser(
         description='Compute metrics between reference instance annotation and predictions')
     parser.add_argument('--ref', type=str, help='Reference instance annotations directory/file')
     parser.add_argument('--pred', type=str, help='Predicted instance masks directory/file')
     parser.add_argument('--verbose', action='store_true')
+    parser.add_argument('--num_workers', type=int, default=8, help='Number of workers for multiprocessing')
     args = parser.parse_args()
 
     main(args)
