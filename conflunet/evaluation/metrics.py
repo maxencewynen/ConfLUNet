@@ -118,16 +118,20 @@ def compute_metrics(
     metrics["Ref_Lesion_Count"] = ref_lesion_count(instance_ref)
     metrics["DiC"] = DiC(instance_pred, instance_ref)
 
-    cl_ids_tier0 = find_confluent_lesions(instance_ref)
-    cl_ids_tier1 = find_tierx_confluent_instances(instance_ref, tier=1)
-    cl_ids_tier2 = find_tierx_confluent_instances(instance_ref, tier=2)
-    cl_ids_per_tier = {0: cl_ids_tier0, 1: cl_ids_tier1, 2: cl_ids_tier2}
+    cl_ids_tier0_conn6 = find_confluent_lesions(instance_ref)
+    cl_ids_tier0_conn26 = find_confluent_lesions(instance_ref, connectivity=26)
+    cl_ids_tier1_conn6 = find_tierx_confluent_instances(instance_ref, tier=1)
+    cl_ids_tier1_conn26 = find_tierx_confluent_instances(instance_ref, tier=1, connectivity=26)
+    cl_ids_per_tier = {(0, 6): cl_ids_tier0_conn6,
+                       (1, 6): cl_ids_tier1_conn6,
+                       (0, 26): cl_ids_tier0_conn26,
+                       (1, 26): cl_ids_tier1_conn26}
 
-    for tier in (0, 1, 2):
+    for tier, connectivity in zip((0, 0, 1, 1) , (6, 26) * 2):
         vprint(verbose, f"[INFO] Computing confluent lesion units (tier {tier} metrics...)")
         ### Confluent lesions Metrics ###
         confluents_instance_ref = np.copy(instance_ref)
-        cl_ids = cl_ids_per_tier[tier]
+        cl_ids = cl_ids_per_tier[(tier, connectivity)]
 
         # set all other ids to 0 in instance_ref
         for id in np.unique(confluents_instance_ref):
@@ -138,6 +142,7 @@ def compute_metrics(
 
         n_cl = len(cl_ids)
         added_string = f"_tier_{tier}" if tier > 0 else ""
+        added_string += f"_conn_{connectivity}" if connectivity > 6 else ""
         metrics["CLU_Count"+added_string] = n_cl
         if n_cl == 0:
             metrics["Recall_CLU"+added_string] = 1.0
@@ -173,7 +178,7 @@ def compute_metrics(
     ###########################################
     all_pred_matches = {"Lesion_ID": [], "Ref_Lesion_ID_Match": [], "Volume_Pred": [], "Volume_Ref": [], "DSC": [], "IoU": []}
     all_ref_matches = {"Lesion_ID": [], "Pred_Lesion_ID_Match": [], "Volume_Ref": [], "Volume_Pred": [], "DSC": [], "IoU": [],
-                       "is_confluent": [], "is_confluent_tier_1": [], "is_confluent_tier_2": []}
+                       "is_confluent": [], "is_confluent_tier_1": [], "is_confluent_conn_26": [], "is_confluent_tier_1_conn_26": []}
 
     # Store for every predicted lesion the potential match in the reference annotation,
     # along with both lesion volumes
@@ -225,9 +230,10 @@ def compute_metrics(
         all_ref_matches["Volume_Pred"].append(volume_pred)
         all_ref_matches["DSC"].append(this_pairs_dsc)
         all_ref_matches["IoU"].append(iou)
-        all_ref_matches["is_confluent"].append(rid in cl_ids_tier0)
-        all_ref_matches["is_confluent_tier_1"].append(rid in cl_ids_tier1)
-        all_ref_matches["is_confluent_tier_2"].append(rid in cl_ids_tier2)
+        all_ref_matches["is_confluent"].append(rid in cl_ids_tier0_conn6)
+        all_ref_matches["is_confluent_conn_26"].append(rid in cl_ids_tier0_conn26)
+        all_ref_matches["is_confluent_tier_1"].append(rid in cl_ids_tier1_conn6)
+        all_ref_matches["is_confluent_tier_1_conn_26"].append(rid in cl_ids_tier1_conn26)
 
     return metrics, all_pred_matches, all_ref_matches
 
