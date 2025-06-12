@@ -100,10 +100,13 @@ class ConfLUNetTrainer(TrainingPipeline):
     def prepare_batch(self, batch_data: dict) -> Tuple[torch.Tensor, torch.Tensor]:
         inputs = batch_data["img"].to(self.device)
         labels = batch_data["seg"].type(torch.LongTensor).to(self.device)
+        offsets_roi = batch_data["instance_seg"].to(self.device)
+        offsets_roi[offsets_roi >= 1000] = 0
+        offsets_roi[(offsets_roi >= 1) & (offsets_roi < 1000)] = 1 # to discard offsets in areas where the instance segmentation is not present (unsplittable lesions)
         center_heatmap = batch_data["center_heatmap"].to(self.device)
         offsets = batch_data["offsets"].to(self.device)
         weights = batch_data["weights"].to(self.device) if "weights" in batch_data else None
-        return inputs, (labels, center_heatmap, offsets, weights)
+        return inputs, (labels, center_heatmap, offsets, weights, offsets_roi)
 
     def get_loss_functions(self) -> Callable:
         return WeightedConfLUNetLoss(
@@ -120,7 +123,7 @@ class ConfLUNetTrainer(TrainingPipeline):
     def compute_loss(self, model_outputs: Tuple[torch.Tensor], outputs: Tuple[torch.Tensor]) -> Tuple[
         torch.Tensor, torch.Tensor]:
         seg_pred, center_heatmap_pred, offsets_pred = model_outputs
-        semantic_ref, center_heatmap_ref, offsets_ref, weights = outputs  # cf prepare_batch
+        semantic_ref, center_heatmap_ref, offsets_ref, weights, offsets_roi = outputs  # cf prepare_batch
         
         return self.loss_fn(
             semantic_pred=seg_pred,
@@ -132,6 +135,7 @@ class ConfLUNetTrainer(TrainingPipeline):
             semantic_weights=weights,
             offsets_weights=weights,
             centers_weights=weights,
+            offsets_roi=offsets_roi
         )
 
     def save_train_patch_debug(self, batch_inputs: Tuple[torch.Tensor, torch.Tensor],

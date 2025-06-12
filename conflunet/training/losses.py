@@ -92,7 +92,10 @@ class WeightedConfLUNetLoss(Callable):
             semantic_weights: torch.Tensor = None,
             offsets_weights: torch.Tensor = None,
             centers_weights: torch.Tensor = None,
+            offsets_roi: torch.Tensor = None # to discard offsets in areas where the instance segmentation is not present (unsplittable lesions)
     ):
+        if offsets_roi is None:
+            offsets_roi = semantic_ref
         ### SEGMENTATION LOSS ###
         segmentation_loss, dice_loss, focal_loss = self.loss_function_segmentation(semantic_pred, semantic_ref, semantic_weights)
 
@@ -100,11 +103,14 @@ class WeightedConfLUNetLoss(Callable):
         center_heatmap_loss = self.loss_function_center_heatmap(center_heatmap_pred, center_heatmap_ref)
         if centers_weights is not None:
             center_heatmap_loss *= centers_weights
+        # Disregard voxels inside semantic_ref but outside offsets_roi
+        only_included_voxels = torch.logical_not(torch.logical_xor(semantic_ref, offsets_roi))
+        center_heatmap_loss *= only_included_voxels
         center_heatmap_loss = torch.mean(center_heatmap_loss)
 
         ### OFFSETS LOSS ###
         # Disregard voxels outside the GT segmentation
-        offset_loss_weights_matrix = semantic_ref.expand_as(offsets_pred)
+        offset_loss_weights_matrix = offsets_roi.expand_as(offsets_pred)
         offset_loss = self.loss_function_offsets(offsets_pred, offsets_ref) * offset_loss_weights_matrix
 
         if offsets_weights is not None:
@@ -151,6 +157,7 @@ class ConfLUNetLoss(WeightedConfLUNetLoss):
             semantic_weights: torch.Tensor = None,
             offsets_weights: torch.Tensor = None,
             centers_weights: torch.Tensor = None,
+            offsets_roi: torch.Tensor = None # to discard offsets in areas where the instance segmentation is not present (unsplittable lesions)
     ):
         if semantic_weights is not None:
             warnings.warn("ConfLUNetLoss does not support semantic_weights. Ignoring them.")
