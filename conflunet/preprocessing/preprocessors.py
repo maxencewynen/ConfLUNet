@@ -63,14 +63,14 @@ class InstanceSegProcessor(DefaultPreprocessor):
         self.small_objects_thresholds = small_objects_thresholds
         self.add_confluent_instances_in_npz = add_confluent_instances_in_npz if not self.inference else False
         self.output_dir_for_inference = output_dir_for_inference
+        self.has_warned_about_1000_plus_instance_ids = False
         if self.inference:
             assert self.output_dir_for_inference is not None, "If inference is True, output_dir_for_inference must be " \
                                                               "specified. Got None."
             assert isdir(self.output_dir_for_inference), "output_dir_for_inference must be a directory. Got %s" % \
                                                             self.output_dir_for_inference
 
-    @staticmethod
-    def modify_instance_seg_fn(instance_seg: np.ndarray) -> np.ndarray:
+    def modify_instance_seg_fn(self, instance_seg: np.ndarray) -> np.ndarray:
         """
         Maps instance ids to a continuous range starting from 1
         :param instance_seg: instance segmentation
@@ -79,7 +79,15 @@ class InstanceSegProcessor(DefaultPreprocessor):
         unique_values = np.unique(instance_seg)
         assert all([i >= 0 for i in unique_values]), "Instance segmentation must not contain negative values"
         assert unique_values[0] == 0, "Instance segmentation must have a background value of 0"
+        if np.max(unique_values) > 1000 and not self.has_warned_about_1000_plus_instance_ids:
+            print("[WARNING] Instance segmentation contains values greater than 1000. These will be considered as "
+                  "unsplittable lesions (i.e. they will be taken into account only for semantic segmentation, "
+                  "not for instance segmentation).")
+            print("[WARNING] If you want to change this behavior, please modify the modify_instance_seg_fn method ")
+            print("[WARNING] This warning will only be displayed once.")
+            self.has_warned_about_1000_plus_instance_ids = True
         mapping = {i: j + 1 for j, i in enumerate(unique_values[1:])}
+        mapping.update({i: 1000 + j for j, i in enumerate([i for i in unique_values[1:] if i >= 1000])})
         mapping[0] = 0
         return np.vectorize(mapping.get)(instance_seg)
 
