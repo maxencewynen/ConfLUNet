@@ -3,19 +3,32 @@ import numpy as np
 import warnings
 import pandas as pd
 from os.path import join as pjoin
-from scipy.ndimage import label, binary_dilation
+from scipy.ndimage import label, binary_dilation, generate_binary_structure
 from typing import List, Tuple, Dict
 from conflunet.postprocessing.utils import convert_types
 
 METRICS_TO_AVERAGE = ["PQ", "DSC", "nDSC", "F1", "Recall", "Precision", "FPR", "Dice_Per_TP", "DiC", "F1_CLU",
                       "Recall_CLU", "Precision_CLU", "Dice_Per_TP_CLU", "PQ_CLU"]
 METRICS_TO_AVERAGE += [f"{metric}_tier_1" for metric in METRICS_TO_AVERAGE if "CLU" in metric]
-METRICS_TO_AVERAGE += [f"{metric}_tier_2" for metric in METRICS_TO_AVERAGE if "CLU" in metric and "tier_1" not in metric]
+METRICS_TO_AVERAGE += [f"{metric}_conn_26" for metric in METRICS_TO_AVERAGE if "CLU" in metric]
 
 METRICS_TO_SUM = ["TP", "FP", "FN", "Pred_Lesion_Count", "Ref_Lesion_Count", "CLU_Count", "TP_CLU", "FN_CLU"]
 METRICS_TO_SUM += [f"{metric}_tier_1" for metric in METRICS_TO_SUM if "CLU" in metric]
-METRICS_TO_SUM += [f"{metric}_tier_2" for metric in METRICS_TO_SUM if "CLU" in metric and "tier_1" not in metric]
+METRICS_TO_SUM += [f"{metric}_conn_26" for metric in METRICS_TO_SUM if "CLU" in metric]
 METRICS_TO_SUM += ["FP_CLU"]
+
+
+def generate_binary_structure_from_connectivity(connectivity: int) -> np.ndarray:
+    if connectivity == 6:
+        structure = generate_binary_structure(3, 1)
+    elif connectivity == 18:
+        structure = generate_binary_structure(3, 2)
+    elif connectivity == 26:
+        structure = np.ones((3, 3, 3), dtype=bool)
+    else:
+        raise ValueError("Invalid connectivity value. Use 6, 18 or 26 for 3D.")
+
+    return structure
 
 
 def intersection_over_union(pred_mask: np.ndarray, ref_mask: np.ndarray) -> float:
@@ -35,9 +48,10 @@ def intersection_over_union(pred_mask: np.ndarray, ref_mask: np.ndarray) -> floa
     return intersection / union if union != 0 else 0
 
 
-def find_tierx_confluent_instances(instance_segmentation: np.ndarray, tier: int = 1):
+def find_tierx_confluent_instances(instance_segmentation: np.ndarray, tier: int = 1, connectivity: int = 6) -> List[int]:
     """
     Find Tier X confluent instances, defined as instances that are part of a confluent lesion when dilated X times.
+    :param connectivity: int, connectivity for the connected components algorithm. 6, 18 or 26.
     """
     binary_segmentation = np.copy(instance_segmentation)
     binary_segmentation[binary_segmentation > 0] = 1
@@ -47,7 +61,8 @@ def find_tierx_confluent_instances(instance_segmentation: np.ndarray, tier: int 
     else:
         binary_segmentation_dilated = binary_dilation(binary_segmentation, iterations=tier)
 
-    connected_components_dilated, num_connected_components_dilated = label(binary_segmentation_dilated)
+    structure = generate_binary_structure_from_connectivity(connectivity)
+    connected_components_dilated, num_connected_components_dilated = label(binary_segmentation_dilated, structure)
 
     confluent_instances = []
     for cc_id in range(1, num_connected_components_dilated + 1):
@@ -63,17 +78,18 @@ def find_tierx_confluent_instances(instance_segmentation: np.ndarray, tier: int 
     return sorted(list(set(confluent_instances)))
 
 
-def find_confluent_instances(instance_segmentation: np.ndarray):
+def find_confluent_instances(instance_segmentation: np.ndarray, connectivity: int = 6):
     """
     Find confluent instances in an instance segmentation map. 30x faster than the previous implementation.
     :param instance_segmentation:
+    :param connectivity: int, connectivity for the connected components algorithm. 6, 18 or 26.
     :return: list of instance ids that are a unit of a confluent lesion
     """
-    return find_tierx_confluent_instances(instance_segmentation, tier=0)
+    return find_tierx_confluent_instances(instance_segmentation, tier=0, connectivity=connectivity)
 
 
-def find_confluent_lesions(instance_segmentation):
-    return find_confluent_instances(instance_segmentation)
+def find_confluent_lesions(instance_segmentation, connectivity: int = 6):
+    return find_confluent_instances(instance_segmentation, connectivity=connectivity)
 
 
 def filter_matched_pairs(
