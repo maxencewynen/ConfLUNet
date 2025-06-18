@@ -67,7 +67,7 @@ def crop_to_nonzero(data, seg=None, instance_seg=None, nonzero_label=-1):
     if instance_seg is not None:
         instance_seg = instance_seg[slicer]
     else:
-        print('Instance segmentation map not provided. Returning None.')
+        # print('Instance segmentation map not provided. Returning None.')
         instance_seg = None
     return data, seg, instance_seg, bbox
 
