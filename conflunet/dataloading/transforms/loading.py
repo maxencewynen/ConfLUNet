@@ -21,7 +21,6 @@ class CustomLoadNPZInstanced(MapTransform):
         self.test = test
         self.get_small_instances = get_small_instances
         self.get_confluent_instances = get_confluent_instances
-        self.has_warned_about_1000_plus_instance_ids = False
 
     def __call__(self, data):
         d = dict(data)
@@ -32,13 +31,6 @@ class CustomLoadNPZInstanced(MapTransform):
                 # casting the segmentation in np.float32 otherwise there is a weird collate error with monai
                 d['instance_seg'] = MetaTensor(array['instance_seg'].astype(np.float32))
                 if np.max(d['instance_seg']) >= 1000:
-                    if not self.has_warned_about_1000_plus_instance_ids:
-                        self.has_warned_about_1000_plus_instance_ids = True
-                        print(
-                            "[WARNING] Instance segmentation contains values greater than 1000. These will be considered as "
-                            "unsplittable lesions (i.e. they will be taken into account only for semantic segmentation, "
-                            "not for instance segmentation).")
-                        print("[WARNING] This warning will only be displayed once.")
                     d['instance_seg'][d['instance_seg'] >= 1000] = 0
                 d['seg'] = MetaTensor((array['seg'] > 0).astype(np.float32))
 
