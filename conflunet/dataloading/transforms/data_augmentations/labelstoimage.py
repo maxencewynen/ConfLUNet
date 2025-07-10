@@ -17,7 +17,9 @@ OUTPUT_LABELS = [ 0, 14, 15, 16, 24,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
                  60,  0, 43, 44]
 
 # LESION_LABELS = list(range(600, 1500))
-LESION_LABELS = list(range(86,250)) + list(range(256, 2000))
+#LESION_LABELS = list(range(86,250)) + list(range(256, 2000))
+LESION_LABELS = list(range(100, 400)) + list(range(1000, 1200))
+
 
 class RandomLabelsToImaged(MapTransform, Randomizable):
     """
