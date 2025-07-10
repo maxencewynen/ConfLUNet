@@ -64,56 +64,64 @@ class RandomLabelsToImaged(MapTransform, Randomizable):
 
         if isinstance(label_map, np.ndarray):
             label_map = torch.from_numpy(label_map)
+            # to gpu
+            label_map = label_map.to(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
 
-        if label_map.dtype != torch.long:
-            label_map = label_map.long()
+        label_map = label_map.long()
+        device = label_map.device
+        if label_map.ndim > 3:
+            if self.discretize:
+                label_map = torch.argmax(label_map, dim=0)
+            else:
+                label_map = label_map[0]  # take first channel
 
-        if self.discretize and label_map.ndim > 3:
-            label_map = torch.argmax(label_map, dim=0, keepdim=True)
-
-        if label_map.ndim == 4:
-            labels_in_image = label_map.unique().long().tolist()
-        else:
-            labels_in_image = torch.unique(label_map).tolist()
-
+        labels_in_image = torch.unique(label_map)
         if self.used_labels is not None:
-            labels_in_image = [l for l in labels_in_image if l in self.used_labels]
+            labels_in_image = labels_in_image[
+                torch.isin(labels_in_image, torch.tensor(self.used_labels, device=device))]
+        if self.ignore_background:
+            labels_in_image = labels_in_image[labels_in_image != 0]
 
-        synthetic_image = torch.zeros_like(label_map[0], dtype=torch.float32)
+        num_labels = labels_in_image.shape[0]
+        shape = label_map.shape
 
-        # sample two values from default mean that are relatively close to each other
-        mean_variation = (self.default_mean[1] - self.default_mean[0]) / 5  # Adjust variation to ensure closeness
-        lesion_mean_1 = self._sample_value(self.default_mean)
-        lesion_mean_2 = self._sample_value((lesion_mean_1 - mean_variation, lesion_mean_1 + mean_variation))
-        lesion_mean = (min(lesion_mean_1, lesion_mean_2), max(lesion_mean_1, lesion_mean_2))
-        # sample two values from default std that are relatively close to each other
-        std_variation = (self.default_std[1] - self.default_std[0]) / 10  # Adjust variation to ensure closeness
-        lesion_std_1 = self._sample_value(self.default_std)
-        lesion_std_2 = self._sample_value((lesion_std_1 - std_variation, lesion_std_1 + std_variation))
-        lesion_std = (min(lesion_std_1, lesion_std_2), max(lesion_std_1, lesion_std_2))
-        # print(f"Lesion mean: {lesion_mean}, Lesion std: {lesion_std}")
+        # One-hot encode efficiently
+        label_mask = torch.stack([(label_map == lbl) for lbl in labels_in_image], dim=0).float()  # [L, H, W, D]
+
+        # Precompute mean/std for each label
+        means = []
+        stds = []
+        mean_variation = (self.default_mean[1] - self.default_mean[0]) / 5
+        std_variation = (self.default_std[1] - self.default_std[0]) / 10
 
         for idx, label in enumerate(labels_in_image):
-            if label == 0 and self.ignore_background:
-                continue
+            if label.item() in LESION_LABELS:
+                lesion_mean_1 = self._sample_value(self.default_mean)
+                lesion_mean_2 = self._sample_value((lesion_mean_1 - mean_variation, lesion_mean_1 + mean_variation))
+                mean = self._sample_value((min(lesion_mean_1, lesion_mean_2), max(lesion_mean_1, lesion_mean_2)))
 
-            if label in LESION_LABELS:
-                mean = self._sample_value(lesion_mean)
-                std = self._sample_value(lesion_std)
-                # print(f"Label {label} : using mean: {mean}, std: {std}")
-
+                lesion_std_1 = self._sample_value(self.default_std)
+                lesion_std_2 = self._sample_value((lesion_std_1 - std_variation, lesion_std_1 + std_variation))
+                std = self._sample_value((min(lesion_std_1, lesion_std_2), max(lesion_std_1, lesion_std_2)))
             else:
                 mean_range = self.default_mean if self.mean is None else self.mean[idx]
                 std_range = self.default_std if self.std is None else self.std[idx]
-
                 mean = self._sample_value(mean_range)
                 std = self._sample_value(std_range)
 
-            mask = (label_map == label)
-            noise = torch.randn_like(synthetic_image) * std + mean
-            synthetic_image = torch.where(mask, noise, synthetic_image)
+            means.append(mean)
+            stds.append(std)
 
-        d[self.image_key] = synthetic_image
+        means_tensor = torch.tensor(means, device=device).view(-1, 1, 1, 1)
+        stds_tensor = torch.tensor(stds, device=device).view(-1, 1, 1, 1)
+
+        # Generate all noise in parallel
+        noise = torch.randn((num_labels, *shape), device=device) * stds_tensor + means_tensor
+
+        # Apply masks in parallel and aggregate
+        synthetic_image = (noise * label_mask).sum(dim=0)
+
+        d[self.image_key] = synthetic_image.float()
 
         return d
 
@@ -138,7 +146,7 @@ if __name__ == '__main__':
             ignore_background=True,
         ),
         # Optionally:
-        RandGaussianSmoothd(keys="image", sigma_x=(0.5, 1.5), prob=0.5),
+        # RandGaussianSmoothd(keys="image", sigma_x=(0.5, 1.5), prob=0.5),
     ])
 
     train_transforms = Compose([
@@ -163,18 +171,18 @@ if __name__ == '__main__':
             mode=('bilinear', 'nearest')
         ),
         RandAdjustContrastd(keys=["image"], prob=0.2, gamma=(0.74, 1.35)),
-        # RandFlipd(keys=["image", "label"], prob=1., spatial_axis=(0, 1, 2)),  # Apply flipping along all axes
+        RandFlipd(keys=["image", "label"], prob=1., spatial_axis=(0, 1, 2)),  # Apply flipping along all axes
         RandBiasFieldd(keys=["image"], prob=0.8, coeff_range=(0.1, 0.2), degree=3),
         RandGaussianNoised(keys=["image"], prob=1.0, mean=0.005, std=0.05),
         # RandMotiond(
         #     keys=["image"], degrees=5, translation=1, num_transforms=1,  perturbation=0.3,
         #     image_interpolation='linear', prob=0.02,
         # ),
-        # RandSimulateLowResolutiond(
-        #     # downsample by NN interpolation and upsample by cubic interpolation
-        #     keys=["image"], downsample_mode="nearest", upsample_mode="trilinear", prob=0.02,
-        #     zoom_range=(0.5, 2.0), align_corners=True
-        # ),
+        RandSimulateLowResolutiond(
+            # downsample by NN interpolation and upsample by cubic interpolation
+            keys=["image"], downsample_mode="nearest", upsample_mode="trilinear", prob=0.02,
+            zoom_range=(0.5, 2.0), align_corners=True
+        ),
         # Normalize between 0 and 1
         # NormalizeIntensityd(keys=["image"], channel_wise=True)
         ScaleIntensityd(keys=["image"], minv=0.0, maxv=1.0, channel_wise=True),
@@ -184,31 +192,39 @@ if __name__ == '__main__':
 
 
     import nibabel as nib
-
-    label_paths = ["/home/mwynen/synthetic_images/label_lesion_HC_inst_sub-001_0.nii.gz",
-                   "/home/mwynen/synthetic_images/label_lesion_HC_inst_sub-162_0.nii.gz",
-                   "/home/mwynen/synthetic_images/label_lesion_HC_inst_sub-237_0.nii.gz",
-                   "/home/mwynen/synthetic_images/label_lesion_HC_inst_sub-268_0.nii.gz"]
+    from time import perf_counter
+    label_paths = ["/home/mwynen/data/nnUNet/nnUNet_raw/Dataset399_SynConfLUNet/imagesTr/sub-001_0000.nii.gz", # 9 lesions
+                   "/home/mwynen/data/nnUNet/nnUNet_raw/Dataset399_SynConfLUNet/imagesTr/sub-005_0000.nii.gz", # 45 lesions
+                   "/home/mwynen/data/nnUNet/nnUNet_raw/Dataset399_SynConfLUNet/imagesTr/sub-036_0000.nii.gz"] # 152 lesions
     for label_path in label_paths:
+        print(f"Processing {label_path}")
         label_data = nib.load(label_path).get_fdata()
         label_tensor = torch.from_numpy(label_data).unsqueeze(0)  # Add channel dimension
         data = {"label": label_tensor}
-        for i in range(2):
+        times = []
+        for i in range(5):
+            start = perf_counter()
             transformed_data = transform(data)
-            transformed_data = train_transforms(transformed_data)
+            end = perf_counter()
+            print(f"Transformation time: {end - start:.4f} seconds")
+            times.append(end - start)
+            # transformed_data = train_transforms(transformed_data)
             synthetic_image = transformed_data["image"]
-            print(synthetic_image.shape)
+            # print(synthetic_image.shape)
             # Save or visualize synthetic_image as needed
             synthetic_image = synthetic_image.numpy()  # Convert to numpy for saving or visualization
             synthetic_image = np.squeeze(synthetic_image)  # Remove channel dimension if needed
-
-            label = transformed_data["label"]
-            label = label.numpy()
-            label = np.squeeze(label)
+            #
+            # label = transformed_data["label"]
+            # label = label.numpy()
+            # label = np.squeeze(label)
 
             # nib.save(nib.Nifti1Image(synthetic_image, np.eye(4)), label_path.replace('labels.nii.gz', f'synthetic_image_{i}.nii.gz'))
             # nib.save(nib.Nifti1Image(label, np.eye(4)), label_path.replace('labels.nii.gz', f'synthetic_label_{i}.nii.gz'))
             # nib.save(nib.Nifti1Image(synthetic_image, np.eye(4)), label_path.replace('labels_instances.nii.gz', f'synthetic_image_{i}.nii.gz'))
             # nib.save(nib.Nifti1Image(label, np.eye(4)), label_path.replace('labels_instances.nii.gz', f'synthetic_label_{i}.nii.gz'))
-            nib.save(nib.Nifti1Image(synthetic_image, np.eye(4)), label_path.replace('.nii.gz', f'_synthetic_image_{i}.nii.gz'))
-            nib.save(nib.Nifti1Image(label, np.eye(4)), label_path.replace('.nii.gz', f'_synthetic_label_{i}.nii.gz'))
+            # nib.save(nib.Nifti1Image(synthetic_image, np.eye(4)), label_path.replace('.nii.gz', f'_synthetic_image_{i}.nii.gz'))
+            # nib.save(nib.Nifti1Image(label, np.eye(4)), label_path.replace('.nii.gz', f'_synthetic_label_{i}.nii.gz'))
+            nib.save(nib.Nifti1Image(synthetic_image, np.eye(4)), f"synthetic_image_{i}.nii.gz")
+            break
+        print(f"This label took {np.mean(times):.4f} seconds on average to transform")
