@@ -11,13 +11,14 @@ from conflunet.postprocessing.small_instances_removal import remove_small_lesion
 
 
 class CustomLoadNPZInstanced(MapTransform):
-    def __init__(self, keys: KeysCollection, test=False, get_small_instances=False,
+    def __init__(self, keys: KeysCollection, test=False, synthetic=False, get_small_instances=False,
                  get_confluent_instances=False, allow_missing_keys=False):
         super().__init__(keys)
         if type(keys) == list and len(keys) > 1:
             raise Exception("This transform should only be used with 1 key.")
         self.keys = keys
         self.allow_missing_keys = allow_missing_keys
+        self.synthetic = synthetic
         self.test = test
         self.get_small_instances = get_small_instances
         self.get_confluent_instances = get_confluent_instances
@@ -25,7 +26,22 @@ class CustomLoadNPZInstanced(MapTransform):
     def __call__(self, data):
         d = dict(data)
         for key in self.key_iterator(d):
+            properties_file = d['properties_file']
+            if not pexists(properties_file):
+                raise ValueError(f"Properties file {properties_file} not found")
+            with open(properties_file, 'rb') as f:
+                properties = load(f)
+            d['properties'] = properties
+
             array = np.load(d[key], allow_pickle=False)
+
+            if self.synthetic:
+                if 'labels' not in array.keys():
+                    d['labels'] = MetaTensor(array['data'].astype(np.float32))
+                else:
+                    d['labels'] = MetaTensor(array['labels'].astype(np.float32))
+                continue
+
             d['img'] = MetaTensor(array['data'].astype(np.float32))
             if not self.test:
                 # casting the segmentation in np.float32 otherwise there is a weird collate error with monai
@@ -61,13 +77,6 @@ class CustomLoadNPZInstanced(MapTransform):
                 d['brainmask'] = MetaTensor((d['seg'] >= 0).astype(np.float32))
             elif 'brainmask' in d.keys():
                 d['brainmask'] = MetaTensor(d['brainmask'].astype(np.float32))
-
-            properties_file = d['properties_file']
-            if not pexists(properties_file):
-                raise ValueError(f"Properties file {properties_file} not found")
-            with open(properties_file, 'rb') as f:
-                properties = load(f)
-            d['properties'] = properties
         return d
 
 

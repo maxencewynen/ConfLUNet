@@ -13,9 +13,11 @@ from monai.transforms import (
     RandAffined,
     RandSpatialCropd,
     SpatialPadd,
-    RandCropByPosNegLabeld,
+    RandCropByPosNegLabeld, Rand3DElasticd, RandBiasFieldd, ScaleIntensityd,
 )
 
+from conflunet.dataloading.transforms.data_augmentations.labelstoimage import RandomLabelsToImaged
+from conflunet.dataloading.transforms.data_augmentations.motion import RandMotiond
 from conflunet.dataloading.transforms.data_augmentations.scaleintensityfixedmean import RandScaleIntensityFixedMeand
 from conflunet.dataloading.transforms.data_augmentations.adjustcontrast import RandAdjustContrastd
 from conflunet.dataloading.transforms.data_augmentations.simulatelowresolution import RandSimulateLowResolutiond
@@ -171,6 +173,64 @@ def get_train_transforms(seed: Union[int, None] = None,
     return transform
 
 
+def get_synthetic_train_transforms(seed: Union[int, None] = None,
+                         patch_size: Tuple = (128, 128, 128),
+                         remove_small_instances: bool = False,
+                         voxel_size: Tuple = (1, 1, 1),
+                         minimum_instance_size: int = 14,
+                         minimum_size_along_axis: int = 3,
+                         get_small_instances=False,
+                         get_confluent_instances=False,
+                         ) -> Compose:
+    additional_keys = []
+    if get_small_instances or get_confluent_instances:
+        additional_keys.append('weights')
+
+    transform_list = [
+        CustomLoadNPZInstanced(keys=['data'], get_small_instances=get_small_instances,
+                               get_confluent_instances=get_confluent_instances, synthetic=True),
+        RandomLabelsToImaged(keys=["image"], label_key="labels", image_key="img", used_labels=None,
+            default_mean=(0.1, 0.9), default_std=(0.01, 0.05), discretize=False, ignore_background=False,),
+        RandGaussianSmoothd(keys="img", sigma_x=(0.5, 1.5), prob=0.5),
+        Rand3DElasticd(prob=1.0, keys=["img", "labels"], sigma_range=(7.5, 7.5),  # approximate, not exact equivalent
+            magnitude_range=(7.5, 7.5), translate_range=[10, 10, 10], #rotate_range=[0, 0, np.deg2rad(20)],
+            scale_range=[0.4, 0.4, 0.4], padding_mode=('border', 'border'), mode=('bilinear', 'nearest')),
+        RandAdjustContrastd(keys=["img"], prob=0.2, gamma=(0.74, 1.35)),
+        RandFlipd(keys=["img", "labels"], prob=1., spatial_axis=(0, 1, 2)),  # Apply flipping along all axes
+        RandBiasFieldd(keys=["img"], prob=0.8, coeff_range=(0.1, 0.2), degree=3),
+        RandGaussianNoised(keys=["img"], prob=1.0, mean=0.005, std=0.05),
+        RandMotiond(keys=["img"], degrees=5, translation=1, num_transforms=1, perturbation=0.3,
+            image_interpolation='linear', prob=0.02),
+        RandSimulateLowResolutiond(keys=["img"], downsample_mode="nearest", upsample_mode="trilinear", prob=0.02,
+            zoom_range=(0.5, 2.0), align_corners=True),
+        ScaleIntensityd(keys=["img"], minv=0.0, maxv=1.0, channel_wise=True),
+        CleanLabelsd(keys=["labels"], label_key="labels", seg_key="seg", instance_seg_key="instance_seg"),
+        FgBgToIndicesd(keys=['seg']),
+        # # Crop random fixed sized regions with the center being a foreground or background voxel
+        # # based on the Pos Neg Ratio.
+        RandCropByPosNegLabeld(keys=['img', 'seg', 'instance_seg', 'labels', 'brainmask'],
+                               label_key="seg",
+                               fg_indices_key="seg_fg_indices",
+                               bg_indices_key="seg_bg_indices",
+                               spatial_size=patch_size, num_samples=1,
+                               pos=1, neg=1, allow_smaller=True),
+        LesionOffsetTransformd(keys="instance_seg"),
+        ToTensord(keys=['img', 'seg', 'offsets', 'center_heatmap', 'labels', 'brainmask']),
+        DeleteKeysd(keys=['properties']),
+    ]
+    if remove_small_instances:
+        raise NotImplementedError("RemoveSmallInstancesTransform is not implemented for synthetic data.")
+        # transform_list.insert(1, RemoveSmallInstancesTransform(
+        #     keys=["instance_seg", "seg"], instance_seg_key="instance_seg", voxel_size=voxel_size,
+        #     minimum_instance_size=minimum_instance_size, minimum_size_along_axis=minimum_size_along_axis)
+        #                       )
+    transform = Compose(transform_list)
+
+    if seed is not None:
+        transform.set_random_state(seed=seed)
+    return transform
+
+
 def get_val_transforms(seed: Union[int, None] = None,
                        patch_size: Tuple = (128, 128, 128),
                        remove_small_instances: bool = False,
@@ -198,8 +258,7 @@ def get_val_transforms(seed: Union[int, None] = None,
     if remove_small_instances:
         transform_list.insert(1, RemoveSmallInstancesTransform(
             keys=["instance_seg", "seg"], instance_seg_key="instance_seg", voxel_size=voxel_size,
-            minimum_instance_size=minimum_instance_size, minimum_size_along_axis=minimum_size_along_axis)
-                              )
+            minimum_instance_size=minimum_instance_size, minimum_size_along_axis=minimum_size_along_axis))
     transform = Compose(transform_list)
 
     if seed is not None:

@@ -27,6 +27,7 @@ def extract_fingerprint_dataset(dataset_id: int,
 
 
 def preprocess_dataset(dataset_id: int,
+                       synthetic: bool = False,
                        plans_identifier: str = 'nnUNetPlans',
                        configurations: Union[Tuple[str], List[str]] = ('2d', '3d_fullres', '3d_lowres'),
                        num_processes: Union[int, Tuple[int, ...], List[int]] = (8, 4, 8),
@@ -63,7 +64,8 @@ def preprocess_dataset(dataset_id: int,
                                                                 inference=inference,
                                                                 output_dir_for_inference=output_dir_for_inference,
                                                                 add_small_object_classes_in_npz=True,
-                                                                add_confluent_instances_in_npz=True)
+                                                                add_confluent_instances_in_npz=True,
+                                                                synthetic=synthetic)
         if inference:
             if input_dir is None:
                 print(f"No input_dir provided for inference. Defaulting input_dir to nnUNet_raw/{dataset_name}/imagesTs")
@@ -88,6 +90,7 @@ def preprocess_dataset(dataset_id: int,
 
 
 def preprocess(dataset_id: int,
+               synthetic: bool = False,
                check_dataset_integrity: bool = True,
                num_processes: int = default_num_processes,
                overwrite_existing_dataset_fingerprint: bool = False,
@@ -127,13 +130,15 @@ def preprocess(dataset_id: int,
 
     # The preprocessing pipeline is then run in the next step.
     preprocess_dataset(dataset_id, num_processes=(num_processes,), configurations=('3d_fullres',),
-                       inference=inference, output_dir_for_inference=output_dir_for_inference, verbose=verbose)
+                       inference=inference, output_dir_for_inference=output_dir_for_inference, synthetic=synthetic,
+                       verbose=verbose)
 
 
 if __name__=='__main__':
     import argparse
     parser = argparse.ArgumentParser(description="Preprocess dataset.")
     parser.add_argument("--dataset_id", required=True, type=int, help="ID of the dataset to preprocess.")
+    parser.add_argument("--synthetic", action="store_true", help="If set, the preprocessing will be done for synthetic data (i.e. brain tissue labels).")
     parser.add_argument("--check_dataset_integrity", action="store_true", help="Check dataset integrity.")
     parser.add_argument("--num_processes", type=int, default=default_num_processes, help="Number of processes to use.")
     parser.add_argument("--overwrite_existing_dataset_fingerprint", action="store_true",
@@ -142,5 +147,5 @@ if __name__=='__main__':
     parser.add_argument("--output_dir_for_inference", type=str, help="if inference only, path to where to store the temporary preprocessed files.")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
-    preprocess(args.dataset_id, args.check_dataset_integrity, args.num_processes, args.overwrite_existing_dataset_fingerprint,
+    preprocess(args.dataset_id, args.synthetic, args.check_dataset_integrity, args.num_processes, args.overwrite_existing_dataset_fingerprint,
                inference=args.inference, output_dir_for_inference=args.output_dir_for_inference, verbose=args.verbose)

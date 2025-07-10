@@ -14,6 +14,7 @@ class ConfLUNetTrainer(TrainingPipeline):
     def __init__(self,
                  dataset_id: int = 321,
                  fold: int = 0,
+                 synthetic: bool = False,
                  num_workers: int = 12,
                  cache_rate: float = 0.0,
                  learning_rate: float = 1e-2,
@@ -49,6 +50,7 @@ class ConfLUNetTrainer(TrainingPipeline):
 
         super().__init__(dataset_id=dataset_id,
                          fold=fold,
+                         synthetic=synthetic,
                          num_workers=num_workers,
                          cache_rate=cache_rate,
                          learning_rate=learning_rate,
@@ -72,8 +74,8 @@ class ConfLUNetTrainer(TrainingPipeline):
             plans_manager=self.plans_manager,
             model=self.model,
             postprocessor=ConfLUNetPostprocessor(
-                minimum_instance_size=14,
-                minimum_size_along_axis=3,
+                minimum_instance_size=0,
+                minimum_size_along_axis=0,
                 voxel_spacing=self.configuration.spacing,
                 semantic_threshold=0.5,
                 heatmap_threshold=0.1,

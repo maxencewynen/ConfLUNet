@@ -15,6 +15,7 @@ def plan_experiment_entry():
 def preprocess_entry():
     parser = argparse.ArgumentParser(description="Preprocess dataset.")
     parser.add_argument("--dataset_id", required=True, type=int, help="ID of the dataset to preprocess.")
+    parser.add_argument("--synthetic", action="store_true", help="If set, the preprocessing will be done for synthetic data (i.e. brain tissue labels).")
     parser.add_argument("--check_dataset_integrity", action="store_true", help="Check dataset integrity.")
     parser.add_argument("--num_processes", type=int, default=default_num_processes, help="Number of processes to use.")
     parser.add_argument("--overwrite_existing_dataset_fingerprint", action="store_true",
@@ -24,7 +25,7 @@ def preprocess_entry():
                         help="if inference only, path to where to store the temporary preprocessed files.")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
-    preprocess(args.dataset_id, args.check_dataset_integrity, args.num_processes,
+    preprocess(args.dataset_id, args.synthetic, args.check_dataset_integrity, args.num_processes,
                args.overwrite_existing_dataset_fingerprint,
                inference=args.inference, output_dir_for_inference=args.output_dir_for_inference, verbose=args.verbose)
 

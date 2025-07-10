@@ -29,6 +29,7 @@ class TrainingPipeline:
     def __init__(self,
                  dataset_id: int = 321,
                  fold: int = 0,
+                 synthetic: bool = False,
                  num_workers: int = 12,
                  cache_rate: float = 0.0,
                  learning_rate: float = 1e-2,
@@ -54,6 +55,7 @@ class TrainingPipeline:
                  ):
         self.dataset_id = dataset_id
         self.fold = fold
+        self.synthetic = synthetic
         self.num_workers = num_workers
         self.cache_rate = cache_rate
         self.learning_rate = learning_rate
@@ -123,6 +125,7 @@ class TrainingPipeline:
 
     def get_dataloaders(self) -> Tuple[DataLoader, DataLoader]:
         train_loader = get_train_dataloader_from_dataset_id_and_fold(self.dataset_id, self.fold,
+                                                                     synthetic=self.synthetic,
                                                                      num_workers=self.num_workers,
                                                                      cache_rate=self.cache_rate,
                                                                      seed_val=self.seed_val,
@@ -384,12 +387,12 @@ class TrainingPipeline:
             print("-" * 10, f"\nEpoch {epoch + 1}/{self.n_epochs}")
             self.train_epoch(epoch)
 
-            if (epoch + 1) % self.val_interval == 0:
+            if (epoch + 1) % self.val_interval == 0 and not self.synthetic:
                 self.validate_epoch(epoch)
 
             self.lr_scheduler.step()
 
-            if (epoch + 1) % self.actual_val_interval == 0:
+            if (epoch + 1) % self.actual_val_interval == 0 and not self.synthetic:
                 self.full_validation(epoch)
 
             self.save_checkpoint(epoch)

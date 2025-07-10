@@ -43,7 +43,8 @@ class InstanceSegProcessor(DefaultPreprocessor):
                  add_small_object_classes_in_npz: bool = False,
                  small_objects_thresholds: int = 100,
                  add_confluent_instances_in_npz: bool = False,
-                 output_dir_for_inference: str = None
+                 output_dir_for_inference: str = None,
+                 synthetic: bool = False
                  ):
         """
         :param verbose:
@@ -64,6 +65,7 @@ class InstanceSegProcessor(DefaultPreprocessor):
         self.add_confluent_instances_in_npz = add_confluent_instances_in_npz if not self.inference else False
         self.output_dir_for_inference = output_dir_for_inference
         self.has_warned_about_1000_plus_instance_ids = False
+        self.synthetic = synthetic
         if self.inference:
             assert self.output_dir_for_inference is not None, "If inference is True, output_dir_for_inference must be " \
                                                               "specified. Got None."
@@ -138,13 +140,17 @@ class InstanceSegProcessor(DefaultPreprocessor):
         # normalize
         # normalization MUST happen before resampling or we get huge problems with resampled nonzero masks no
         # longer fitting the images perfectly!
-        data = self._normalize(data, seg, configuration_manager,
-                               plans_manager.foreground_intensity_properties_per_channel)
-
-        # print('current shape', data.shape[1:], 'current_spacing', original_spacing,
-        #       '\ntarget shape', new_shape, 'target_spacing', target_spacing)
         old_shape = data.shape[1:]
-        data = configuration_manager.resampling_fn_data(data, new_shape, original_spacing, target_spacing)
+        print("is this synthetic?", self.synthetic)
+        if not self.synthetic:
+            data = self._normalize(data, seg, configuration_manager,
+                                   plans_manager.foreground_intensity_properties_per_channel)
+
+            # print('current shape', data.shape[1:], 'current_spacing', original_spacing,
+            #       '\ntarget shape', new_shape, 'target_spacing', target_spacing)
+            data = configuration_manager.resampling_fn_data(data, new_shape, original_spacing, target_spacing)
+        else:
+            data = configuration_manager.resampling_fn_seg(data, new_shape, original_spacing, target_spacing)
         seg = configuration_manager.resampling_fn_seg(seg, new_shape, original_spacing, target_spacing) if has_seg else None
         instance_seg = configuration_manager.resampling_fn_seg(instance_seg, new_shape, original_spacing,
                                                                target_spacing) if has_seg else None

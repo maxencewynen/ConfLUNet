@@ -10,6 +10,8 @@ from monai.transforms import MapTransform
 from monai.config import KeysCollection
 from copy import copy
 
+from conflunet.dataloading.transforms.data_augmentations.labelstoimage import LESION_LABELS
+
 
 class DeleteKeysd(MapTransform):
     def __init__(self, keys: KeysCollection, allow_missing_keys=True):
@@ -183,3 +185,41 @@ class Printerd:
             image = data[key]
             print(self.message, key, image.dtype)
         return data
+
+
+class CleanLabelsd(MapTransform):
+    """
+    A MONAI transform to clean label maps by removing specified lesion labels.
+    """
+    def __init__(self, keys: KeysCollection,
+                 label_key='label',
+                 instance_seg_key='instance_seg',
+                 seg_key='seg',
+                 brainmask_key='brainmask',
+                 lesion_labels=LESION_LABELS,
+                 allow_missing_keys=True):
+        super().__init__(keys)
+        self.keys = keys
+        self.label_key = label_key
+        self.instance_seg_key = instance_seg_key
+        self.seg_key = seg_key
+        self.brainmask_key = brainmask_key
+        self.lesion_labels = lesion_labels
+        self.allow_missing_keys = allow_missing_keys
+
+    def __call__(self, data):
+        d = dict(data)
+        assert self.label_key in d, f"Key '{self.label_key}' not found in data."
+        array = d[self.label_key]
+
+        if isinstance(array, torch.Tensor):
+            array = array.cpu().numpy()
+
+        cleaned_array = np.where(np.isin(array, self.lesion_labels, invert=True), 0, array)
+        d[self.instance_seg_key] = MetaTensor(cleaned_array)
+        d[self.seg_key] = MetaTensor((cleaned_array > 0).astype(np.float32))
+        d[self.brainmask_key] = MetaTensor((array > 0).astype(np.float32))
+
+        # del d[self.label_key]
+
+        return d
