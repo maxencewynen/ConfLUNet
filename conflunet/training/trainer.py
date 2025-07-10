@@ -396,3 +396,6 @@ class TrainingPipeline:
                 self.full_validation(epoch)
 
             self.save_checkpoint(epoch)
+
+            if epoch % 250 == 0 and epoch > 0:
+                self.save_checkpoint(epoch, checkpoint_filename=os.path.join(self.save_dir, f"checkpoint_epoch_{epoch}.pth"))
