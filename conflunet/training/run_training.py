@@ -14,6 +14,7 @@ def run_training_entry():
     # data
     parser.add_argument('--dataset_id', type=int, default=321, help='Specify the dataset id')
     parser.add_argument('--fold', type=int, default=0, help='Specify the fold')
+    parser.add_argument('--synthetic', default=False, action='store_true', help='Whether to train on synthetic data')
     parser.add_argument('--semantic', default=False, action='store_true', help='Whether to train the semantic segmentation model')
     parser.add_argument('--num_workers', type=int, default=12, help='Number of workers')
     parser.add_argument('--cache_rate', default=0, type=float)
