@@ -211,9 +211,11 @@ class TrainingPipeline:
     def train_epoch(self, epoch: int) -> None:
         self.model.train()
         epoch_logs = self.initialize_epoch_logs()
-        start_epoch_time = time.time()
-        for batch_idx, batch_data in enumerate(self.train_loader):
-            start_batch_time = time.time()
+        train_iterator = iter(self.train_loader)
+        start_epoch_time = time.perf_counter()
+        for batch_idx in range(len(self.train_loader)):
+            start_batch_time = time.perf_counter()
+            batch_data = next(train_iterator)
             # Prepare the batch (specific to subclass)
             img, outputs = self.prepare_batch(batch_data)
 
@@ -274,13 +276,13 @@ class TrainingPipeline:
         self.optimizer.zero_grad()
 
     def print_batch_progress(self, batch_idx: int, loss: torch.Tensor, start_batch_time: float) -> None:
-        elapsed_time = time.time() - start_batch_time
+        elapsed_time = time.perf_counter() - start_batch_time
         print(f"Batch {batch_idx + 1}/{len(self.train_loader)}, train_loss: {loss.item():.4f} "
               f"(elapsed time: {int(elapsed_time // 60)}min {int(elapsed_time % 60)}s)")
 
     @staticmethod
     def print_epoch_summary(epoch_loss_values: dict, start_epoch_time: float, epoch: int) -> None:
-        elapsed_epoch_time = time.time() - start_epoch_time
+        elapsed_epoch_time = time.perf_counter() - start_epoch_time
         print(f"Epoch {epoch + 1} took {int(elapsed_epoch_time // 60)}min {int(elapsed_epoch_time % 60)}s")
         print(f"Epoch average loss: {epoch_loss_values['Training Loss/Total Loss']:.4f}")
 

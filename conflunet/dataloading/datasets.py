@@ -26,4 +26,5 @@ class LesionInstancesDataset(CacheDataset):
         super().__init__(data=dataset, transform=transforms, cache_rate=cache_rate, num_workers=num_workers)
 
     def make_dataloader(self, batch_size=1, num_workers=0, shuffle=True):
-        return DataLoader(self, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+        return DataLoader(self, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers,
+                            multiprocessing_context='spawn')

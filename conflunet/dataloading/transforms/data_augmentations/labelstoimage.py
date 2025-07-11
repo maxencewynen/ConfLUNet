@@ -133,7 +133,7 @@ class RandomLabelsToImaged(MapTransform, Randomizable):
 
                 synthetic_image += (noise * masks).sum(dim=0)
 
-        d[self.image_key] = synthetic_image.float().unsqueeze(0).to(orig_device)  # Add channel dimension back
+        d[self.image_key] = synthetic_image.float().unsqueeze(0).to(orig_device).numpy()  # Add channel dimension back
 
         return d
 
