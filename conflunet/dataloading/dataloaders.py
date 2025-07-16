@@ -123,6 +123,7 @@ def get_train_dataloader_from_dataset_id_and_fold(
 def get_val_dataloader_from_dataset_id_and_fold(
         dataset_id: Union[int, str],
         fold: int = None,
+        batch_size: int = None,
         num_workers: int = 0,
         cache_rate: float = 1.0,
         seed_val: int = 1) -> monai.data.DataLoader:
@@ -134,7 +135,7 @@ def get_val_dataloader_from_dataset_id_and_fold(
     tr_keys, val_keys = _get_val_train_keys(preprocessed_dataset_folder, fold)
 
     patch_size = configuration.patch_size
-    batch_size = configuration.batch_size
+    batch_size = batch_size or configuration.batch_size
 
     return get_val_dataloader(preprocessed_data_folder,
                               case_identifiers=val_keys, patch_size=patch_size, batch_size=batch_size,
@@ -155,7 +156,7 @@ def get_full_val_dataloader_from_dataset_id_and_fold(
 
     return get_test_dataloader(preprocessed_data_folder, case_identifiers=val_keys, batch_size=1,
                                num_workers=num_workers, test=False, voxel_size=configuration.spacing,
-                               minimum_instance_size=14, minimum_size_along_axis=3)
+                               minimum_instance_size=0, minimum_size_along_axis=0)
 
 
 if __name__=="__main__":

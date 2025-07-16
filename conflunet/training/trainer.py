@@ -95,7 +95,11 @@ class TrainingPipeline:
 
         # Dataloaders
         self.train_loader, self.val_loader = self.get_dataloaders()
-        self.full_val_loader = get_full_val_dataloader_from_dataset_id_and_fold(self.dataset_id, self.fold, self.num_workers)
+        # self.full_val_loader = get_full_val_dataloader_from_dataset_id_and_fold(self.dataset_id, self.fold, self.num_workers)
+        self.full_val_loader = get_val_dataloader_from_dataset_id_and_fold(self.dataset_id, self.fold, batch_size=1,
+                                                                          num_workers=self.num_workers,
+                                                                          cache_rate=self.cache_rate,
+                                                                          seed_val=self.seed_val)
 
         self._edit_name()
 
