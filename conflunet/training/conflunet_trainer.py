@@ -72,8 +72,8 @@ class ConfLUNetTrainer(TrainingPipeline):
             plans_manager=self.plans_manager,
             model=self.model,
             postprocessor=ConfLUNetPostprocessor(
-                minimum_instance_size=14,
-                minimum_size_along_axis=3,
+                minimum_instance_size=0,
+                minimum_size_along_axis=0,
                 voxel_spacing=self.configuration.spacing,
                 semantic_threshold=0.5,
                 heatmap_threshold=0.1,
