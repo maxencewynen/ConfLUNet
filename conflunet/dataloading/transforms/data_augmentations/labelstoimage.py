@@ -88,7 +88,6 @@ class RandomLabelsToImaged(MapTransform, Randomizable):
         num_labels = labels_in_image.shape[0]
         shape = label_map.shape
 
-        synthetic_image = torch.zeros(shape, dtype=torch.float16, device=device)
 
         mean_variation = (self.default_mean[1] - self.default_mean[0]) / 5
         std_variation = (self.default_std[1] - self.default_std[0]) / 10
@@ -101,37 +100,48 @@ class RandomLabelsToImaged(MapTransform, Randomizable):
         lesion_std_2 = self._sample_value((lesion_std_1 - std_variation, lesion_std_1 + std_variation))
 
         label_chunk_size = 32  # adjustable
+        
+        while label_chunk_size > 3:
+            try:    
+                synthetic_image = torch.zeros(shape, dtype=torch.float16, device=device)
 
-        with torch.cuda.amp.autocast(dtype=torch.float16):
-            for start_idx in range(0, num_labels, label_chunk_size):
-                end_idx = min(start_idx + label_chunk_size, num_labels)
-                chunk_labels = labels_in_image[start_idx:end_idx]
+                with torch.cuda.amp.autocast(dtype=torch.float16):
+                    for start_idx in range(0, num_labels, label_chunk_size):
+                        end_idx = min(start_idx + label_chunk_size, num_labels)
+                        chunk_labels = labels_in_image[start_idx:end_idx]
 
-                masks = torch.stack([(label_map == lbl) for lbl in chunk_labels], dim=0).half()  # [B, H, W, D]
-                B = masks.shape[0]
+                        masks = torch.stack([(label_map == lbl) for lbl in chunk_labels], dim=0).half()  # [B, H, W, D]
+                        B = masks.shape[0]
 
-                means = []
-                stds = []
-                for idx, label in enumerate(chunk_labels):
-                    if label.item() in LESION_LABELS:
-                        mean = self._sample_value((min(lesion_mean_1, lesion_mean_2), max(lesion_mean_1, lesion_mean_2)))
-                        std = self._sample_value((min(lesion_std_1, lesion_std_2), max(lesion_std_1, lesion_std_2)))
-                    else:
-                        idx_global = (start_idx + idx)
-                        mean_range = self.default_mean if self.mean is None else self.mean[idx_global]
-                        std_range = self.default_std if self.std is None else self.std[idx_global]
-                        mean = self._sample_value(mean_range)
-                        std = self._sample_value(std_range)
+                        means = []
+                        stds = []
+                        for idx, label in enumerate(chunk_labels):
+                            if label.item() in LESION_LABELS:
+                                mean = self._sample_value((min(lesion_mean_1, lesion_mean_2), max(lesion_mean_1, lesion_mean_2)))
+                                std = self._sample_value((min(lesion_std_1, lesion_std_2), max(lesion_std_1, lesion_std_2)))
+                            else:
+                                idx_global = (start_idx + idx)
+                                mean_range = self.default_mean if self.mean is None else self.mean[idx_global]
+                                std_range = self.default_std if self.std is None else self.std[idx_global]
+                                mean = self._sample_value(mean_range)
+                                std = self._sample_value(std_range)
 
-                    means.append(mean)
-                    stds.append(std)
+                            means.append(mean)
+                            stds.append(std)
 
-                means_tensor = torch.tensor(means, device=device, dtype=torch.float16).view(B, 1, 1, 1)
-                stds_tensor = torch.tensor(stds, device=device, dtype=torch.float16).view(B, 1, 1, 1)
+                        means_tensor = torch.tensor(means, device=device, dtype=torch.float16).view(B, 1, 1, 1)
+                        stds_tensor = torch.tensor(stds, device=device, dtype=torch.float16).view(B, 1, 1, 1)
 
-                noise = torch.randn((B, *shape), device=device, dtype=torch.float16) * stds_tensor + means_tensor
+                        noise = torch.randn((B, *shape), device=device, dtype=torch.float16) * stds_tensor + means_tensor
 
-                synthetic_image += (noise * masks).sum(dim=0)
+                        synthetic_image += (noise * masks).sum(dim=0)
+
+                    break
+
+            except torch.OutOfMemoryError as e:
+                del means_tensor, stds_tensor, noise, synthetic_image, masks
+                torch.cuda.empty_cache()
+                label_chunk_size //= 2
 
         d[self.image_key] = synthetic_image.float().unsqueeze(0).to(orig_device).numpy()  # Add channel dimension back
 
