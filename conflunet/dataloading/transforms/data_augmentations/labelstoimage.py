@@ -99,6 +99,9 @@ class RandomLabelsToImaged(MapTransform, Randomizable):
         lesion_std_1 = self._sample_value(self.default_std)
         lesion_std_2 = self._sample_value((lesion_std_1 - std_variation, lesion_std_1 + std_variation))
 
+        #lesion_mean = self._sample_value((min(lesion_mean_1, lesion_mean_2), max(lesion_mean_1, lesion_mean_2)))
+        #lesion_std = self._sample_value((min(lesion_std_1, lesion_std_2), max(lesion_std_1, lesion_std_2)))
+        
         label_chunk_size = 32  # adjustable
         
         while label_chunk_size > 3:
@@ -119,6 +122,8 @@ class RandomLabelsToImaged(MapTransform, Randomizable):
                             if label.item() in LESION_LABELS:
                                 mean = self._sample_value((min(lesion_mean_1, lesion_mean_2), max(lesion_mean_1, lesion_mean_2)))
                                 std = self._sample_value((min(lesion_std_1, lesion_std_2), max(lesion_std_1, lesion_std_2)))
+                                #mean = lesion_mean
+                                #std = lesion_std
                             else:
                                 idx_global = (start_idx + idx)
                                 mean_range = self.default_mean if self.mean is None else self.mean[idx_global]
@@ -139,7 +144,9 @@ class RandomLabelsToImaged(MapTransform, Randomizable):
                     break
 
             except torch.OutOfMemoryError as e:
-                del means_tensor, stds_tensor, noise, synthetic_image, masks
+                for var in ["means_tensor", "stds_tensor", "noise", "synthetic_image", "masks"]:
+                    if var in locals():
+                        del locals()[var]
                 torch.cuda.empty_cache()
                 label_chunk_size //= 2
 
