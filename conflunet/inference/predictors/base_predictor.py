@@ -157,6 +157,8 @@ class Predictor:
         for key, value in output.items():
             if value is None:
                 continue
+            if "offsets_pred_" in key:
+                continue
             if key in ("semantic_pred_binary", "center_pred_binary", "instance_seg_pred"):
                 resample_fn = self.configuration.resampling_fn_seg
             else:
@@ -210,15 +212,6 @@ class Predictor:
                 output[key] = this_output_reverted_cropping
 
             elif key == 'offsets_pred':
-                # Unfortunately, only this transpose_backward is supported because of the conversion to original shape of
-                # the predicted offsets. This can be changed in the future, because for the moment it is not a priority.
-                if not self.semantic and tuple(self.plans_manager.transpose_backward) != (1, 2, 0):
-                    warnings.warn(f"Only transpose_backward = (1, 2, 0) is supported, got "
-                                  f"{tuple(self.plans_manager.transpose_backward)}")
-                if not self.semantic and tuple(self.plans_manager.transpose_forward) != (2, 0, 1):
-                    warnings.warn(f"Only transpose_forward = (2, 0, 1) is supported, got "
-                                  f"{tuple(self.plans_manager.transpose_forward)}")
-                # This is a special case because the offsets values actually correspond to different axes.
                 value = torch.squeeze(value, 0)
                 slicer = bounding_box_to_slice(properties['bbox_used_for_cropping'])
                 value = value.to('cpu') if isinstance(value, torch.Tensor) else value
@@ -226,12 +219,10 @@ class Predictor:
                 converted_output = []
                 # We need to individually undo the preprocessing for each axis of the offsets (x, y, z), and stack
                 # them in the correct order so that it makes sense in the final prediction.
-                # Here set the correct order to be (0, 2, 1) because we assume a specific transpose_backward tuple
-                # (2, 1, 0) (as stated above). How to generalize this is still an open question for
-                # which I don't have the time to think about for the moment.
-                # To be honest, I don't fully understand the logic behind this, so I can't provide a better solution
-                # for the moment. I just know it works like this :-).
-                for dim in (0, 2, 1):
+                # The order of the axes is determined by the transpose_forward property of the plans manager,
+                # reversed to match the original order of the axes.
+                dims = tuple(reversed(self.plans_manager.transpose_forward))
+                for dim in dims:
                     # First make sure that the output is in the correct shape for the nnUNet resampling function
                     this_output_dim = torch.unsqueeze(value[dim], 0)
 
@@ -259,6 +250,11 @@ class Predictor:
 
                 converted_output = torch.unsqueeze(converted_output, 0)
                 output[key] = converted_output
+
+        if not self.semantic:
+            for i, key in enumerate(['offsets_pred_x', 'offsets_pred_y', 'offsets_pred_z']):
+                output[key] = output['offsets_pred'][i, :, :, :] if len(output['offsets_pred'].shape) == 4 else output['offsets_pred'][:, i, :, :, :]
+                output[key] = torch.squeeze(output[key]) if isinstance(output[key], torch.Tensor) else np.squeeze(output[key])
 
         return output
 
