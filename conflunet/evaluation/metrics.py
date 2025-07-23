@@ -57,9 +57,11 @@ def compute_metrics(
     vprint(verbose, f"[INFO] Matching instances...")
     matched_pairs_iou, removed_matched_pred, unmatched_pred, unmatched_ref = \
         match_instances(instance_pred, instance_ref, return_iou=True, return_removed_matched_pred=True)
-    matched_pairs = [(pred_id, ref_id) for pred_id, ref_id, iou in matched_pairs_iou]
+    matched_pairs = [(pred_id, ref_id) for pred_id, ref_id, iou in matched_pairs_iou if ref_id < 1000]  # remove unsplittable reference instances
+    pred_matched_with_unsplittable_lesions = np.array([x[0] for x in matched_pairs_iou if x[1] >= 1000])
+    unmatched_ref = [x for x in unmatched_ref if x < 1000]  # remove unsplittable reference instances
     matched_pairs_iou = {(p, r): iou for p, r, iou in matched_pairs_iou}
-    removed_matched_pred = [x[0] for x in removed_matched_pred]
+    removed_matched_pred = [x[0] for x in removed_matched_pred if x[1] < 1000]  # remove unsplittable reference instances
     vprint(verbose, f"[INFO] Found {len(matched_pairs)} matched pairs, "
                     f"{len(removed_matched_pred)} removed matched predicted instances (FP CLU), "
                     f"{len(unmatched_pred)} unmatched predicted instances, "
@@ -95,8 +97,8 @@ def compute_metrics(
     TP = len(matched_pairs)
     FP = len(unmatched_pred)
     FN = len(unmatched_ref)
-    ref_count = len(np.unique(instance_ref[instance_ref != 0]))
-    pred_count = len(np.unique(instance_pred[instance_pred != 0]))
+    ref_count = len(np.unique(instance_ref[(instance_ref != 0) & (instance_ref < 1000)]))  # remove unsplittable reference instances)
+    pred_count = len(np.unique(instance_pred[(instance_pred != 0) & (~np.isin(instance_pred, pred_matched_with_unsplittable_lesions))]))  # remove unsplittable predicted instances
     assert ref_count == TP + FN, f"Reference count ({ref_count}) should be equal to TP + FN ({TP + FN})"
     assert pred_count == TP + FP, f"Predicted count ({pred_count}) should be equal to TP + FP ({TP + FP})"
 
@@ -139,6 +141,8 @@ def compute_metrics(
                 confluents_instance_ref[confluents_instance_ref == id] = 0
 
         matched_pairs_cl, _, unmatched_ref_cl = match_instances(instance_pred, confluents_instance_ref)
+        matched_pairs_cl = [(pred_id, ref_id) for pred_id, ref_id in matched_pairs_cl if ref_id < 1000]  # remove unsplittable reference instances
+        unmatched_ref_cl = [ref_id for ref_id in unmatched_ref_cl if ref_id < 1000]  # remove unsplittable reference instances
 
         n_cl = len(cl_ids)
         added_string = f"_tier_{tier}" if tier > 0 else ""
@@ -188,14 +192,14 @@ def compute_metrics(
     for pid, volume_pred in zip(all_pred_labels, all_pred_counts):
         all_pred_matches["Lesion_ID"].append(pid)
 
-        if not (pid in unmatched_pred):
+        if not (pid in unmatched_pred) and not (pid in pred_matched_with_unsplittable_lesions):
             matched_ref_id = pred_to_ref_matches[pid]
             volume_ref = sum((instance_ref[instance_ref == matched_ref_id] > 0).astype(np.uint8))
             volume_ref *= np.prod(voxel_size)
             this_pairs_dsc = dice_scores[matched_pairs.index((pid, matched_ref_id))]
             iou = matched_pairs_iou[(pid, matched_ref_id)]
         else:
-            matched_ref_id = None
+            matched_ref_id = 1000 if pid in pred_matched_with_unsplittable_lesions else None
             volume_ref = None
             this_pairs_dsc = None
             iou = None
@@ -211,6 +215,8 @@ def compute_metrics(
     all_ref_labels, all_ref_counts = np.unique(instance_ref[instance_ref != 0], return_counts=True)
     ref_to_pred_matches = {v: k for k, v in dict(matched_pairs).items()}
     for rid, volume_ref in zip(all_ref_labels, all_ref_counts):
+        if rid >= 1000:  # skip unsplittable reference instances
+            continue
         all_ref_matches["Lesion_ID"].append(rid)
 
         if not (rid in unmatched_ref):
