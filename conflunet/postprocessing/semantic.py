@@ -15,7 +15,7 @@ class ConnectedComponentsPostprocessor(Postprocessor):
             self,
             minimum_instance_size: int = 0,
             minimum_size_along_axis: int = 0,
-            voxel_spacing: Tuple[float, float, float] = (1, 1, 1),
+            voxel_spacing: Tuple[float, float, float] = None,
             semantic_threshold: float = 0.5,
             device: torch.device = None,
             verbose : bool = True
@@ -49,7 +49,7 @@ class ACLSPostprocessor(Postprocessor):
             self,
             minimum_instance_size: int = 0,
             minimum_size_along_axis: int = 0,
-            voxel_spacing: Tuple[float, float, float] = (1, 1, 1),
+            voxel_spacing: Tuple[float, float, float] = None,
             connectivity: int = 26,
             semantic_threshold: float = 0.5,
             sigma: float = 1.0,
