@@ -4,6 +4,7 @@ from typing import Dict, Tuple
 from scipy.spatial.distance import cdist
 from scipy.ndimage import label, generate_binary_structure
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
+from sklearn.cluster import DBSCAN
 
 from monai.config.type_definitions import NdarrayOrTensor
 
@@ -172,3 +173,82 @@ class ACLSPostprocessor(Postprocessor):
         output_dict = self.refine_instance_segmentation(output_dict)
 
         return output_dict
+
+class ClusterOffsetsPostprocessor(Postprocessor):
+    def __init__(
+            self,
+            minimum_instance_size: int = 0,
+            minimum_size_along_axis: int = 0,
+            voxel_spacing: Tuple[float, float, float] = None,
+            semantic_threshold: float = 0.5,
+            eps: float = 0.5,
+            min_samples: int = 5,
+            device: torch.device = None,
+            verbose: bool = True
+    ):
+        super(ClusterOffsetsPostprocessor, self).__init__(
+            minimum_instance_size=minimum_instance_size,
+            minimum_size_along_axis=minimum_size_along_axis,
+            voxel_spacing=voxel_spacing,
+            semantic_threshold=semantic_threshold,
+            name="ClusterOffsets",
+            device=device,
+            verbose=verbose
+        )
+        self.eps = eps
+        self.min_samples = min_samples
+
+    @staticmethod
+    def compute_final_coordinates(offsets):
+        """
+        offsets: np.ndarray of shape (3, H, W, D)
+        Returns: final_coords of shape (N, 3), where N = H*W*D
+        """
+        _, H, W, D = offsets.shape
+        x, y, z = np.meshgrid(np.arange(H), np.arange(W), np.arange(D), indexing='ij')
+        coords = np.stack([x, y, z], axis=0).astype(float)
+        final_coords = coords + offsets
+        final_coords = final_coords.reshape(3, -1).T  # (N, 3)
+        return final_coords
+
+    @staticmethod
+    def cluster_voxels(final_coords, eps, min_samples):
+        """
+        final_coords: np.ndarray of shape (N, 3)
+        Returns: labels of shape (N,), where each value is a cluster label
+        """
+        clustering = DBSCAN(eps=eps, min_samples=min_samples, n_jobs=-1).fit(final_coords)
+        return clustering.labels_
+
+    @staticmethod
+    def labels_to_image(labels, lesion_mask):
+        """
+        labels: np.ndarray of shape (N,), cluster labels for lesion voxels only
+        lesion_mask: np.ndarray of shape (H, W, D), boolean mask of lesion voxels
+        Returns: label_image of shape (H, W, D), 0 for non-lesion, cluster label for lesion voxels
+        """
+        label_image = np.zeros(lesion_mask.shape, dtype=labels.dtype)
+        label_image[lesion_mask] = labels + 1  # add 1 to avoid DBSCAN's -1 noise label being mapped to valid voxels
+        return label_image
+
+    def _postprocess(self, output_dict: Dict[str, NdarrayOrTensor]) -> Dict[str, NdarrayOrTensor]:
+        assert 'semantic_pred_proba' in output_dict.keys(), "output_dict must contain 'semantic_pred_proba'"
+        assert 'offsets' in output_dict.keys(), "output_dict must contain 'offsets'"
+
+        semantic_pred_proba = output_dict['semantic_pred_proba']
+        binary_pred = np.squeeze(self._maybe_convert_to_numpy(self.binarize_semantic_probability(semantic_pred_proba)))
+
+        final_coords = self.compute_final_coordinates(output_dict['offsets'])
+        final_coords_lesion = final_coords[(binary_pred == 1).flatten()]
+        print(f"{final_coords_lesion.shape=}")
+
+        labels = self.cluster_voxels(final_coords_lesion, eps=self.eps, min_samples=self.min_samples)
+        instance_seg_pred = self.labels_to_image(labels, binary_pred == 1)
+
+        output_dict['instance_seg_pred'] = self._convert_as(instance_seg_pred, semantic_pred_proba)
+        output_dict['semantic_pred_binary'] = self._convert_as(binary_pred, semantic_pred_proba)
+
+        output_dict = self.refine_instance_segmentation(output_dict)
+
+        return output_dict
+
