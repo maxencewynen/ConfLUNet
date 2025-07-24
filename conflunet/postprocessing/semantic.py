@@ -245,7 +245,6 @@ class ClusterOffsetsPostprocessor(Postprocessor):
 
         final_coords = self.compute_final_coordinates(output_dict['offsets'])
         final_coords_lesion = final_coords[(binary_pred == 1).flatten()]
-        print(f"{final_coords_lesion.shape=}")
 
         labels = self.cluster_voxels(final_coords_lesion, eps=self.eps, min_samples=self.min_samples)
         instance_seg_pred = self.labels_to_image(labels, binary_pred == 1)
