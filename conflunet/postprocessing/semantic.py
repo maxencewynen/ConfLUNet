@@ -243,7 +243,12 @@ class ClusterOffsetsPostprocessor(Postprocessor):
         semantic_pred_proba = output_dict['semantic_pred_proba']
         binary_pred = np.squeeze(self._maybe_convert_to_numpy(self.binarize_semantic_probability(semantic_pred_proba)))
 
-        final_coords = self.compute_final_coordinates(output_dict['offsets'])
+        voxel_spacing = output_dict.get('properties', None)
+        voxel_spacing = voxel_spacing['sitk_stuff']['spacing'] if voxel_spacing is not None else self.voxel_spacing
+        if voxel_spacing is None:
+            raise ValueError("voxel_spacing must be provided or set in the postprocessor")
+
+        final_coords = self.compute_final_coordinates(output_dict['offsets'], voxel_spacing=voxel_spacing)
         final_coords_lesion = final_coords[(binary_pred == 1).flatten()]
 
         labels = self.cluster_voxels(final_coords_lesion, eps=self.eps, min_samples=self.min_samples)
