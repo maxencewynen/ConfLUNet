@@ -198,14 +198,19 @@ class ClusterOffsetsPostprocessor(Postprocessor):
         self.eps = eps
         self.min_samples = min_samples
 
-    @staticmethod
-    def compute_final_coordinates(offsets):
+    def compute_final_coordinates(self, offsets, voxel_spacing=None):
         """
         offsets: np.ndarray of shape (3, H, W, D)
         Returns: final_coords of shape (N, 3), where N = H*W*D
         """
+        voxel_spacing = self.voxel_spacing if voxel_spacing is None else voxel_spacing
+        if voxel_spacing is None:
+            raise ValueError("voxel_spacing must be provided or set in the postprocessor")
         _, H, W, D = offsets.shape
         x, y, z = np.meshgrid(np.arange(H), np.arange(W), np.arange(D), indexing='ij')
+        x *= voxel_spacing[0]
+        y *= voxel_spacing[1]
+        z *= voxel_spacing[2]
         coords = np.stack([x, y, z], axis=0).astype(float)
         final_coords = coords + offsets
         final_coords = final_coords.reshape(3, -1).T  # (N, 3)
@@ -217,7 +222,7 @@ class ClusterOffsetsPostprocessor(Postprocessor):
         final_coords: np.ndarray of shape (N, 3)
         Returns: labels of shape (N,), where each value is a cluster label
         """
-        clustering = DBSCAN(eps=eps, min_samples=min_samples, n_jobs=-1).fit(final_coords)
+        clustering = DBSCAN(eps=eps, min_samples=min_samples, n_jobs=1).fit(final_coords)
         return clustering.labels_
 
     @staticmethod
