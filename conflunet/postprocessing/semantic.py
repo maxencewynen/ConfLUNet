@@ -208,9 +208,9 @@ class ClusterOffsetsPostprocessor(Postprocessor):
             raise ValueError("voxel_spacing must be provided or set in the postprocessor")
         _, H, W, D = offsets.shape
         x, y, z = np.meshgrid(np.arange(H), np.arange(W), np.arange(D), indexing='ij')
-        x *= voxel_spacing[0]
-        y *= voxel_spacing[1]
-        z *= voxel_spacing[2]
+        x = x.astype(float) * voxel_spacing[0]
+        y = y.astype(float) * voxel_spacing[1]
+        z = z.astype(float) * voxel_spacing[2]
         coords = np.stack([x, y, z], axis=0).astype(float)
         final_coords = coords + offsets
         final_coords = final_coords.reshape(3, -1).T  # (N, 3)
