@@ -141,7 +141,6 @@ class InstanceSegProcessor(DefaultPreprocessor):
         # normalization MUST happen before resampling or we get huge problems with resampled nonzero masks no
         # longer fitting the images perfectly!
         old_shape = data.shape[1:]
-        print("is this synthetic?", self.synthetic)
         if not self.synthetic:
             data = self._normalize(data, seg, configuration_manager,
                                    plans_manager.foreground_intensity_properties_per_channel)
