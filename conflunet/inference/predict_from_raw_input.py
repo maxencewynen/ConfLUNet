@@ -39,13 +39,15 @@ def predict_from_raw_input_and_model_name(
         checkpoint_name = "checkpoint_best_Panoptic_Quality_ConfLUNet.pth"
     else:
         checkpoint_name = f"checkpoint_best_Dice_Score_{postprocessor}.pth"
+    checkpoint_name = "checkpoint_final.pth"
 
     postprocessor_class = ConfLUNetPostprocessor if not semantic else None
     if postprocessor_class is None:
         postprocessor_class = ACLSPostprocessor if postprocessor == 'ACLS' else ConnectedComponentsPostprocessor
 
     predictor_class = ConfLUNetPredictor if not semantic else SemanticPredictor
-    model = [pjoin(base_dir, f"fold_{i}", checkpoint_name) for i in range(5)]
+    # model = [pjoin(base_dir, f"fold_{i}", checkpoint_name) for i in range(5)]
+    model = pjoin(base_dir, f"fold_0", checkpoint_name)
     if not pexists(model[0]):
         raise FileNotFoundError(f"Model checkpoint not found at {model[0]}")
 
@@ -55,6 +57,7 @@ def predict_from_raw_input_and_model_name(
     predictor = predictor_class(
         plans_manager=plans_manager,
         model=model,
+        save_only_instance_segmentation=False,
         postprocessor=postprocessor_class(**postprocessor_kwargs),
         output_dir=output_dir,
         num_workers=num_workers,

@@ -166,7 +166,7 @@ def get_full_val_dataloader_from_dataset_id_and_fold(
 
     return get_test_dataloader(preprocessed_data_folder, case_identifiers=val_keys, batch_size=1,
                                num_workers=num_workers, test=False, voxel_size=configuration.spacing,
-                               minimum_instance_size=14, minimum_size_along_axis=3)
+                               minimum_instance_size=0, minimum_size_along_axis=0)
 
 
 if __name__=="__main__":

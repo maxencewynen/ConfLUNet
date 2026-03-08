@@ -183,6 +183,7 @@ class ClusterOffsetsPostprocessor(Postprocessor):
             semantic_threshold: float = 0.5,
             eps: float = 0.5,
             min_samples: int = 5,
+            assign_unclustered_voxels_to_nearest_instance: bool = True,
             device: torch.device = None,
             verbose: bool = True
     ):
@@ -197,8 +198,9 @@ class ClusterOffsetsPostprocessor(Postprocessor):
         )
         self.eps = eps
         self.min_samples = min_samples
+        self.assign_unclustered_voxels_to_nearest_instance = assign_unclustered_voxels_to_nearest_instance
 
-    def compute_final_coordinates(self, offsets, voxel_spacing=None):
+    def compute_final_coordinates(self, offsets, voxel_spacing=None, return_coords=False):
         """
         offsets: np.ndarray of shape (3, H, W, D)
         Returns: final_coords of shape (N, 3), where N = H*W*D
@@ -214,7 +216,7 @@ class ClusterOffsetsPostprocessor(Postprocessor):
         coords = np.stack([x, y, z], axis=0).astype(float)
         final_coords = coords + offsets
         final_coords = final_coords.reshape(3, -1).T  # (N, 3)
-        return final_coords
+        return final_coords if not return_coords else (final_coords, coords.reshape(3, -1).T)
 
     @staticmethod
     def cluster_voxels(final_coords, eps, min_samples):
@@ -248,11 +250,27 @@ class ClusterOffsetsPostprocessor(Postprocessor):
         if voxel_spacing is None:
             raise ValueError("voxel_spacing must be provided or set in the postprocessor")
 
-        final_coords = self.compute_final_coordinates(output_dict['offsets'], voxel_spacing=voxel_spacing)
-        final_coords_lesion = final_coords[(binary_pred == 1).flatten()]
+        final_coords, coords = self.compute_final_coordinates(output_dict['offsets'], voxel_spacing=voxel_spacing, return_coords=True)
+        final_coords_lesion = final_coords[(binary_pred == 1).flatten()]  # shape (N, 3)
+        coords_lesion = coords[(binary_pred == 1).flatten()]  # shape (N, 3)
 
-        labels = self.cluster_voxels(final_coords_lesion, eps=self.eps, min_samples=self.min_samples)
-        instance_seg_pred = self.labels_to_image(labels, binary_pred == 1)
+        labels = self.cluster_voxels(final_coords_lesion, eps=self.eps, min_samples=self.min_samples)  # shape (N,)
+        labelled_voxels_coords = coords_lesion[labels != -1]  # shape (M, 3) where M is the number of labelled voxels
+        if len(labelled_voxels_coords) == 0:
+            # connected components case
+            instance_seg_pred = label(binary_pred)[0]  # shape (H, W, D)
+        else:
+            if self.assign_unclustered_voxels_to_nearest_instance:
+                unlabelled_voxels_coords = coords_lesion[labels == -1]  # shape (K, 3) where K is the number of unlabelled voxels
+
+                if len(unlabelled_voxels_coords) > 0:
+                    # Find nearest labelled voxel for each unlabelled voxel
+                    distances = cdist(unlabelled_voxels_coords, labelled_voxels_coords)  # shape (K, M)
+                    nearest_indices = np.argmin(distances, axis=1)
+                    nearest_labels = labels[labels != -1][nearest_indices]
+                    labels[labels == -1] = nearest_labels
+
+            instance_seg_pred = self.labels_to_image(labels, binary_pred == 1)
 
         output_dict['instance_seg_pred'] = self._convert_as(instance_seg_pred, semantic_pred_proba)
         output_dict['semantic_pred_binary'] = self._convert_as(binary_pred, semantic_pred_proba)
