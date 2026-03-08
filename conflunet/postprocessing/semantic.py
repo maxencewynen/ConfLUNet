@@ -198,6 +198,7 @@ class ClusterOffsetsPostprocessor(Postprocessor):
         )
         self.eps = eps
         self.min_samples = min_samples
+        self.orig_voxel_spacing = orig_voxel_spacing
         self.assign_unclustered_voxels_to_nearest_instance = assign_unclustered_voxels_to_nearest_instance
 
     def compute_final_coordinates(self, offsets, voxel_spacing=None, return_coords=False):
@@ -208,11 +209,12 @@ class ClusterOffsetsPostprocessor(Postprocessor):
         voxel_spacing = self.voxel_spacing if voxel_spacing is None else voxel_spacing
         if voxel_spacing is None:
             raise ValueError("voxel_spacing must be provided or set in the postprocessor")
+        orig_voxel_spacing = self.orig_voxel_spacing if self.orig_voxel_spacing is not None else (1,1,1)
         _, H, W, D = offsets.shape
         x, y, z = np.meshgrid(np.arange(H), np.arange(W), np.arange(D), indexing='ij')
-        x = x.astype(float) * voxel_spacing[0]
-        y = y.astype(float) * voxel_spacing[1]
-        z = z.astype(float) * voxel_spacing[2]
+        x = x.astype(float) * voxel_spacing[0] / orig_voxel_spacing[0]
+        y = y.astype(float) * voxel_spacing[1] / orig_voxel_spacing[1]
+        z = z.astype(float) * voxel_spacing[2] / orig_voxel_spacing[2]
         coords = np.stack([x, y, z], axis=0).astype(float)
         final_coords = coords + offsets
         final_coords = final_coords.reshape(3, -1).T  # (N, 3)
