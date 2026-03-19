@@ -9,7 +9,7 @@ Refer to [nnUNet's hardware requirements](https://github.com/MIC-DKFZ/nnUNet/blo
 ## Installation instructions
 First clone this repository:
 ```commandline
-git clone https://github.com/maxencewynen/ConfLUNet/tree/main
+git clone https://github.com/maxencewynen/ConfLUNet.git
 cd ConfLUNet
 ```
 As with nnUNet, we strongly recommend that you install ConfLUNet's requirements in a virtual environment! Pip or anaconda are both fine. If you choose to compile PyTorch from source (see below), you will need to use conda instead of pip.
@@ -19,7 +19,7 @@ Use a recent version of Python! 3.9 or newer is guaranteed to work!
 1. Install [PyTorch](https://pytorch.org/get-started/locally/) as described on their website (conda/pip). Please install the latest version with support for your hardware (cuda, mps, cpu). For maximum speed, consider [compiling pytorch yourself](https://github.com/pytorch/pytorch#from-source) (experienced users only!).
 2. Install the repo locally 
     ```commandline
-    pip install -e
+    pip install -e .
     ```
 3. ConfLUNet's file organization is entirely based on nnU-Net's. It needs to know where you intend to save raw data, preprocessed data and trained models. For this you need to set a few environment variables. Please follow nnUNet's instructions [here](https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/setting_up_paths.md).
 
