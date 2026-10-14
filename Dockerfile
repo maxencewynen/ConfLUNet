@@ -16,7 +16,8 @@ RUN apt-get update && apt-get install -y \
 # Copy the project files
 RUN mkdir /conflunet
 WORKDIR /conflunet
-COPY . .
+COPY conflunet/ ./conflunet/
+COPY pyproject.toml setup.py requirements.txt README.md LICENSE ./
 
 # Install the package in editable mode
 RUN pip install -e .

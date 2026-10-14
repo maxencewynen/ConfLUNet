@@ -30,13 +30,26 @@ def predict_from_raw_input_and_model_name(
         verbose: bool = False,
 ) -> None:
     if dataset_id==321: # This is just for the docker with the defaul model for inference
-        dataset_name = "Dataset321_WMLIS"
-        plans_manager = PlansManagerInstanceSeg(
-            pjoin(DEFAULT_MODEL_ROOT, "nnUNet_preprocessed", dataset_name, "nnUNetPlans.json"))
-        results_root = pjoin(DEFAULT_MODEL_ROOT, "nnUNet_results")
-    else:
-        dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(dataset_id)
-        results_root = nnUNet_results
+        import os, sys
+        pp_path = pjoin(DEFAULT_MODEL_ROOT, "nnUNet_preprocessed")
+        rs_path = pjoin(DEFAULT_MODEL_ROOT, "nnUNet_results")
+        rp_path = pjoin(DEFAULT_MODEL_ROOT, "nnUNet_raw")
+        # child/spawned processes re-read the environment:
+        os.environ['nnUNet_preprocessed'] = pp_path
+        os.environ['nnUNet_results']      = rs_path
+        # already-imported modules hold frozen string copies: rebind them all
+        for _m in list(sys.modules.values()):
+            if _m is None:
+                continue
+            if getattr(_m, 'nnUNet_preprocessed', None) is not None:
+                _m.nnUNet_preprocessed = pp_path
+            if getattr(_m, 'nnUNet_results', None) is not None:
+                _m.nnUNet_results = rs_path
+            if getattr(_m, 'nnUNet_raw', None) is not None:
+                _m.nnUNet_raw = rp_path
+    #else:
+    dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(dataset_id)
+    results_root = nnUNet_results
 
     base_dir = pjoin(results_root, dataset_name, model_name)
     if not semantic and postprocessor == 'ConfLUNet':

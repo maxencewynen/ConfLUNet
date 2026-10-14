@@ -114,3 +114,9 @@ ENV/
 *.model
 
 !documentation/assets/scribble_example.png
+# bundled model weights: keep structure, not the large checkpoints
+conflunet_model/**/*.pth
+
+conflunet_model/*
+!conflunet_model/
+!conflunet_model/README.md
