@@ -1,0 +1,9 @@
+.git
+.gitignore
+data/
+*.sh
+predict_folds_for_semantic.py
+semantic_trainer_DSC-CE_loss.py
+__pycache__/
+*.pyc
+*.egg-info/

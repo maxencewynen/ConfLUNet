@@ -17,8 +17,9 @@ def get_model(configuration: ConfigurationManagerInstanceSeg, n_channels: int, s
 
 
 def load_model(configuration: ConfigurationManagerInstanceSeg, checkpoint: str, n_channels: int, semantic: bool = False):
+    from conflunet.training.utils import get_default_device # get_default_device shouldnt be in training.utils
     model = get_model(configuration, n_channels, semantic)
-    checkpoint = torch.load(checkpoint)
+    checkpoint = torch.load(checkpoint, map_location=get_default_device())
     model.load_state_dict(checkpoint['state_dict'])
     return model
 

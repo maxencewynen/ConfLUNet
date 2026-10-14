@@ -13,8 +13,10 @@ from conflunet.postprocessing.instance import ConfLUNetPostprocessor
 from conflunet.inference.predictors.instance import ConfLUNetPredictor
 from conflunet.inference.predictors.semantic import SemanticPredictor
 from conflunet.postprocessing.semantic import ACLSPostprocessor, ConnectedComponentsPostprocessor
-from conflunet.utilities.planning_and_configuration import load_dataset_and_configuration
+from conflunet.utilities.planning_and_configuration import PlansManagerInstanceSeg, load_dataset_and_configuration
 
+
+DEFAULT_MODEL_ROOT = "/opt/conflunet_default_inference_model" # This is just for the docker with the defaul model for inference
 
 def predict_from_raw_input_and_model_name(
         dataset_id: int,
@@ -27,14 +29,16 @@ def predict_from_raw_input_and_model_name(
         num_workers: int = 4,
         verbose: bool = False,
 ) -> None:
-    dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(dataset_id)
-    if torch.cuda.is_available():
-        device = torch.cuda
+    if dataset_id==321: # This is just for the docker with the defaul model for inference
+        dataset_name = "Dataset321_WMLIS"
+        plans_manager = PlansManagerInstanceSeg(
+            pjoin(DEFAULT_MODEL_ROOT, "nnUNet_preprocessed", dataset_name, "nnUNetPlans.json"))
+        results_root = pjoin(DEFAULT_MODEL_ROOT, "nnUNet_results")
     else:
-        warnings.warn("CUDA is not available. Running on CPU, but this will be slow.")
-        device = torch.cpu
+        dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(dataset_id)
+        results_root = nnUNet_results
 
-    base_dir = pjoin(nnUNet_results, dataset_name, model_name)
+    base_dir = pjoin(results_root, dataset_name, model_name)
     if not semantic and postprocessor == 'ConfLUNet':
         checkpoint_name = "checkpoint_best_Panoptic_Quality_ConfLUNet.pth"
     else:

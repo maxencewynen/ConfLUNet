@@ -1,3 +1,5 @@
+import warnings
+
 import torch
 import os
 import numpy as np
@@ -14,7 +16,9 @@ def get_default_device():
     """ Set device """
     if torch.cuda.is_available():
         return torch.device('cuda')
-    raise Exception("No GPU device was found: I cannot train without GPU.")
+    warnings.warn("No GPU device found; falling back to CPU. "
+                  "Training is not practical on CPU; inference will be slow.")
+    return torch.device('cpu')
 
 
 def seed_everything(seed_val: int):
