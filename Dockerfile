@@ -16,7 +16,8 @@ RUN apt-get update && apt-get install -y \
 # Copy the project files
 RUN mkdir /conflunet
 WORKDIR /conflunet
-COPY . .
+COPY conflunet/ ./conflunet/
+COPY pyproject.toml setup.py requirements.txt README.md LICENSE ./
 
 # Install the package in editable mode
 RUN pip install -e .
@@ -25,3 +26,8 @@ RUN pip install -e .
 ARG resources="/opt/conflunet_resources"
 ENV nnUNet_raw=$resources"/nnUNet_raw" nnUNet_preprocessed=$resources"/nnUNet_preprocessed" nnUNet_results=$resources"/nnUNet_results"
 
+
+# Bundle the default inference model (Dataset321_WMLIS) in its own tree so
+# `--dataset_id 321` works with no mounts, in Docker and after Singularity/Apptainer conversion.
+# Kept separate from $resources so a user mounting over /opt/conflunet_resources never hides it.
+COPY conflunet_model/ /opt/conflunet_default_inference_model/

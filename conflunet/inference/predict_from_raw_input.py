@@ -13,8 +13,10 @@ from conflunet.postprocessing.instance import ConfLUNetPostprocessor
 from conflunet.inference.predictors.instance import ConfLUNetPredictor
 from conflunet.inference.predictors.semantic import SemanticPredictor
 from conflunet.postprocessing.semantic import ACLSPostprocessor, ConnectedComponentsPostprocessor
-from conflunet.utilities.planning_and_configuration import load_dataset_and_configuration
+from conflunet.utilities.planning_and_configuration import PlansManagerInstanceSeg, load_dataset_and_configuration
 
+
+DEFAULT_MODEL_ROOT = "/opt/conflunet_default_inference_model" # This is just for the docker with the defaul model for inference
 
 def predict_from_raw_input_and_model_name(
         dataset_id: int,
@@ -27,14 +29,29 @@ def predict_from_raw_input_and_model_name(
         num_workers: int = 4,
         verbose: bool = False,
 ) -> None:
+    if dataset_id==321: # This is just for the docker with the defaul model for inference
+        import os, sys
+        pp_path = pjoin(DEFAULT_MODEL_ROOT, "nnUNet_preprocessed")
+        rs_path = pjoin(DEFAULT_MODEL_ROOT, "nnUNet_results")
+        rp_path = pjoin(DEFAULT_MODEL_ROOT, "nnUNet_raw")
+        # child/spawned processes re-read the environment:
+        os.environ['nnUNet_preprocessed'] = pp_path
+        os.environ['nnUNet_results']      = rs_path
+        # already-imported modules hold frozen string copies: rebind them all
+        for _m in list(sys.modules.values()):
+            if _m is None:
+                continue
+            if getattr(_m, 'nnUNet_preprocessed', None) is not None:
+                _m.nnUNet_preprocessed = pp_path
+            if getattr(_m, 'nnUNet_results', None) is not None:
+                _m.nnUNet_results = rs_path
+            if getattr(_m, 'nnUNet_raw', None) is not None:
+                _m.nnUNet_raw = rp_path
+    #else:
     dataset_name, plans_manager, configuration, n_channels = load_dataset_and_configuration(dataset_id)
-    if torch.cuda.is_available():
-        device = torch.cuda
-    else:
-        warnings.warn("CUDA is not available. Running on CPU, but this will be slow.")
-        device = torch.cpu
+    results_root = nnUNet_results
 
-    base_dir = pjoin(nnUNet_results, dataset_name, model_name)
+    base_dir = pjoin(results_root, dataset_name, model_name)
     if not semantic and postprocessor == 'ConfLUNet':
         checkpoint_name = "checkpoint_best_Panoptic_Quality_ConfLUNet.pth"
     else:
